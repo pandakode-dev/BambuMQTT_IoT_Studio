@@ -4,7 +4,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -19,6 +21,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pandakode.bambumqtt.ui.theme.*
@@ -32,7 +35,6 @@ fun SerialPlotterScreen() {
     var isRunning by remember { mutableStateOf(true) }
     var phase by remember { mutableFloatStateOf(0f) }
 
-    // Buffer 40 titik sampel untuk Channel 1 (ADC Voltage) & Channel 2 (PWM Setpoint)
     var ch1Samples by remember { mutableStateOf(List(40) { 50f }) }
     var ch2Samples by remember { mutableStateOf(List(40) { 50f }) }
 
@@ -55,55 +57,78 @@ fun SerialPlotterScreen() {
         modifier = Modifier
             .fillMaxSize()
             .background(EsdMatBg)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. HEADER KONTROL OSILOSKOP SERIAL PLOTTER
+        // 1. HEADER KONTROL PLOTTER (TATA LETAK HORIZONTAL RAPI, TIDAK LAGI VERTIKAL!)
         Card(
             colors = CardDefaults.cardColors(containerColor = PcbEmeraldDark),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ShowChart, contentDescription = null, tint = CopperGold)
+                // Bagian Kiri diberi weight(1f) agar teks tidak menabrak tombol
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ShowChart,
+                        contentDescription = null,
+                        tint = CopperGold,
+                        modifier = Modifier.size(26.dp)
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
                             text = "LIVE SERIAL WAVEFORM PLOTTER",
                             color = CopperGold,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.sp
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "CH1: Sensor ADC1 (Hijau) | CH2: PID Target (Cyan)",
+                            text = "CH1: ADC1 (Hijau) | CH2: PID (Cyan)",
                             color = PcbMintLight,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Tombol Freeze/Run Horizontal Normal (Tampil Menyamping Utuh)
                 Button(
                     onClick = { isRunning = !isRunning },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isRunning) CopperOrange else CopperGold
-                    )
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Icon(
                         imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = SiliconDark
+                        tint = SiliconDark,
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (isRunning) "FREEZE" else "RUN",
                         color = SiliconDark,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 12.sp
+                        fontSize = 11.sp,
+                        maxLines = 1
                     )
                 }
             }
@@ -115,15 +140,14 @@ fun SerialPlotterScreen() {
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(290.dp)
+                .height(270.dp)
                 .border(2.dp, PcbEmeraldMedium, RoundedCornerShape(16.dp))
         ) {
-            Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Box(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
 
-                    // Gambar Grid Osiloskop
                     val cols = 8
                     val rows = 6
                     for (i in 0..cols) {
@@ -135,7 +159,6 @@ fun SerialPlotterScreen() {
                         drawLine(TerminalBorder, Offset(0f, y), Offset(w, y), strokeWidth = 1.5f)
                     }
 
-                    // Fungsi gambar kurva sinyal
                     fun drawWaveform(samples: List<Float>, color: Color) {
                         if (samples.size < 2) return
                         val path = Path()
@@ -168,17 +191,17 @@ fun SerialPlotterScreen() {
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "ANALISIS SINYAL TELEMETRI REAL-TIME",
                     fontWeight = FontWeight.ExtraBold,
                     color = PcbEmeraldDark,
-                    fontSize = 13.sp
+                    fontSize = 12.sp
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PlotStatBox("CH1 LIVE", String.format("%.1f", ch1Latest), PcbEmeraldDark, Modifier.weight(1f))
                     PlotStatBox("CH1 MIN", String.format("%.1f", ch1Min), LogicCyan, Modifier.weight(1f))
-                    PlotStatBox("CH1 MAX (PEAK)", String.format("%.1f", ch1Max), CopperOrange, Modifier.weight(1f))
+                    PlotStatBox("CH1 PEAK", String.format("%.1f", ch1Max), CopperOrange, Modifier.weight(1f))
                 }
             }
         }
@@ -190,10 +213,10 @@ fun PlotStatBox(title: String, value: String, color: Color, modifier: Modifier =
     Column(
         modifier = modifier
             .background(EsdMatBg, RoundedCornerShape(12.dp))
-            .padding(12.dp)
+            .padding(10.dp)
     ) {
-        Text(title, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(value, fontSize = 18.sp, color = color, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
+        Text(title, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold, maxLines = 1)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(value, fontSize = 16.sp, color = color, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, maxLines = 1)
     }
 }
