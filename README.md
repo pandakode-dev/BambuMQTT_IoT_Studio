@@ -1,65 +1,50 @@
-# 🐼 BambuMQTT — Pro IoT SCADA Panel, USB/BT Serial Terminal, & Wokwi-Style Simulator
-**An Advanced Native Android MQTT v3.1.1 Controller, Serial Waveform Plotter, & Interactive Electronics Simulator**
+# 🐼 BambuMQTT — Pro IoT SCADA Panel, Blynk Dashboard, USB/OTA Serial & Wokwi Simulator
+**An Advanced Native Android MQTT v3.1.1 Controller, Blynk-Style Cloud Studio, USB OTG Serial Terminal, & Zero-Lag Circuit Simulator**
 
-BambuMQTT adalah aplikasi panel kontrol *Internet of Things* (IoT), terminal komunikasi serial lapangan (*USB OTG & Bluetooth SPP/BLE*), osiloskop grafik (*Serial Plotter*), dan simulator sirkuit elektronik interaktif (*Wokwi-style*) *native* Android yang dirancang khusus untuk *Embedded Engineer* (ESP32/Arduino/ESP8266), teknisi IoT, dan pengembang *Smart Home*. Aplikasi ini mengusung identitas visual papan sirkuit modern dengan tema **Silicon PCB Emerald, Copper Trace Gold, dan Logic Analyzer Cyan**.
+BambuMQTT adalah aplikasi panel kontrol *Internet of Things* (IoT), studio dashboard bergaya *Blynk*, terminal komunikasi serial lapangan (*USB OTG & Wi-Fi OTA*), osiloskop grafik (*Serial Plotter*), dan simulator sirkuit elektronik interaktif (*Wokwi-style*) *native* Android yang dirancang khusus untuk *Embedded Engineer* (ESP32/ESP8266/Arduino), teknisi otomasi PLC/Modbus, dan pengembang *Smart Home*. Aplikasi ini mengusung identitas visual papan sirkuit tercetak modern dengan tema **Silicon PCB Emerald, Copper Trace Gold, dan Logic Analyzer Cyan**.
 
 ---
 
 ## 📸 Tampilan Utama (Features Preview)
 
-| Panel SCADA MQTT | BambuSim Interactive | USB OTG & Wi-Fi OTA | Live Serial Plotter | Live Code IDE | Lab MCU & Kamus I2C |
+| Panel SCADA MQTT | Kanvas Wokwi Sim | Blynk IoT Dashboard | USB OTG & Wi-Fi OTA | Live Code IDE & OTA | Lab MCU & Kamus I2C |
 | :---: | :---: | :---: | :---: | :---: | :---: |
-| *(Preview SCADA)* | *(Preview BambuSim)* | *(Preview USB/OTA)* | *(Preview Plotter)* | *(Preview IDE)* | *(Preview MCU Lab)* |
+| *(Tarik SS 1)* | *(Tarik SS 2)* | *(Tarik SS 3)* | *(Tarik SS 4)* | *(Tarik SS 5)* | *(Tarik SS 6)* |
 
 ---
 
 ## ✨ Fitur-Fitur "Super IoT & Embedded Suite" (Core Features)
 
-### 1. 🎮 "BambuSim" — Wokwi-Style Drag & Drop Simulator (New!)
-- **Visual Komponen Realistis:** Canvas visual adaptif yang menggambar *ESP32 DevKit V1/ESP8266* (lengkap dengan antena emas & label pin), *OLED Display SSD1306*, *Sensor Suhu DHT22*, *Sensor Jarak HC-SR04*, *Servo SG90*, *Relay 1CH*, *Active Buzzer*, *Potensiometer*, *LED 5mm*, dan *Resistor*.
-- **Kalkulator Gelang Warna Dinamis:** Pilih atau ketik nilai hambatan resistor (misal: `220 Ω`, `1 kΩ`, `10 kΩ`), keempat pita warnanya di kanvas akan **berubah warna secara otomatis**!
-- **Interactive Drag & Drop:** Geser komponen di kanvas secara bebas menggunakan jari Anda, kabel-kabel *jumper* berwarna akan ikut melengkung secara fleksibel (*Bezier Curves*).
-- **Sirkuit Berbasis Daya (VCC & GND):** Komponen **tidak akan aktif/menyala** (menampilkan indikator `UNWIRED` atau `NO POWER`) jika kabel daya `VCC` (3.3V/5V) dan `GND` belum terhubung dengan benar ke pin MCU.
-- **Dual-Language Virtual Interpreter:** Tulis kode C++ (Arduino) atau MicroPython, klik **RUN SIM**, dan sirkuit virtual akan berinteraksi secara real-time (LED berkedip, OLED menampilkan teks koding Anda, Servo berputar).
+### 1. 🎮 "BambuSim" — Zero-Lag Wokwi-Style Circuit Simulator
+- **Visual Komponen Realistis Berlabel Pin:** Merender *ESP32 DevKit V1 / ESP8266 NodeMCU* (lengkap dengan label kaki `3V3`, `5V`, `GND`, `D2`, `D4`, `D5`, `D18`, `D19`, `D21`, `D22`, `D34`), *OLED SSD1306 I2C*, *Sensor DHT22*, *Ultrasonik HC-SR04*, *Servo SG90*, *Modul Relay 1CH*, *Buzzer Piezo*, *Potensiometer*, *LED 5mm*, dan *Resistor 4-Gelang*.
+- **Zero-Lag 120 FPS Drag & Drop + Tap-to-Move:** Arsitektur *Direct MutableFloatState* dan *Shared Native Paint* memastikan pergeseran komponen sangat mulus tanpa jeda, dilengkapi fitur **Tap-to-Teleport** (ketuk komponen lalu ketuk ruang kosong untuk pindah instan) serta tombol **✨ Auto-Rapikan** agar komponen tidak menumpuk.
+- **Kalkulator Gelang Warna Resistor Dinamis:** Pilih nilai hambatan (`100 Ω`, `220 Ω`, `330 Ω`, `1k Ω`, `4.7k Ω`, `10k Ω`), keempat pita warna pada tubuh resistor langsung berubah warna secara *real-time* sesuai standar EIA internasional!
+- **Validasi Daya Sirkuit Nyata (`VCC` & `GND`):** Komponen **tidak akan aktif/menyala** (menampilkan peringatan `UNWIRED` / `NO VCC`) apabila kaki `VCC` dan `GND` belum dihubungkan ke pin daya mikrokontroler. Dilengkapi tombol **⚡ Auto-Wire Semua Pin** dalam 1 klik.
+- **Dual-Language Virtual Interpreter (C++ & MicroPython):** Tulis koding Arduino C++ (`.ino`) atau MicroPython (`.py`) dan jalankan simulasi secara langsung.
 
-### 2. 🔌 USB OTG Hardware Driver & Wi-Fi OTA Serial Reader (Anti Terpotong)
-- **Zero Configuration USB Host:** Deteksi langsung chip jembatan serial yang paling banyak digunakan (*CH340/CH341, CP2102/CP2104, FTDI, Espressif Native USB*) tanpa perlu menginstal driver luar.
-- **Live Background Reader:** Membaca data serial (`Serial.println` asli) secara terus-menerus lewat `BulkTransfer` USB OTG atau nirkabel via **Wi-Fi OTA TCP Serial (Telnet/WebSerial Port 23)**.
-- **Auto-Reset Bootloader Trigger:** Kirim urutan sinyal hardware `DTR/RTS` dari HP untuk memaksa ESP32 masuk ke *Flash Bootloader Mode* atau melakukan *Hard Reset*.
-- **Wi-Fi & MQTT Provisioner:** Tembak konfigurasi *SSID, Password, & IP Broker* baru langsung ke memori NVS/EEPROM ESP32 lewat kabel OTG tanpa perlu membongkar atau kompilasi ulang kode C++.
-- **ASCII & HEX View:** Log data yang andal dengan stempel waktu milidetik, dilengkapi tombol-tombol makro cepat (`AT+GMR`, `STATUS?`, `RELAY_ON`).
+### 2. 📱 "Bambu-Blynk" — Interactive IoT Cloud Dashboard (12 Jenis Widget)
+- **Sinkronisasi Langsung dengan Simulator & MQTT:** Dilengkapi 12 variasi widget bergaya *Blynk IoT*: *Toggle Switch*, *Push Button Momentary*, *Rotary Knob*, *PWM Slider*, *Radial Gauge*, *Digital Value Display*, *Status Alarm LED*, *RGB NeoPixel Color Picker*, *Stepper Input (+/-)*, *Live SuperChart*, *Virtual LCD 16x2*, dan *Cloud Terminal*.
+- **Custom Widget Builder:** Tambahkan widget baru pada *Virtual Pin (`V1` – `V12`)* secara dinamis dalam hitungan detik.
 
-### 3. 🎛️ Custom IoT SCADA Panel & Auto ESP32 Code Generator
-- **Interactive SCADA Widgets:** Tambahkan *Switch Relay*, *PWM Slider (0-255)*, dan *Radial Sensor Gauge* (berbasis Canvas grafis) untuk menguji broker MQTT lokal maupun publik.
-- **Auto-Generated C++ (.ino) Sketch:** Menghasilkan kode program utuh berdasarkan widget yang Anda buat di layar HP, siap disalin ke Arduino IDE.
-- **Offline Loopback Simulator:** Uji responsivitas widget dan simulasi data tanpa perlu jaringan internet atau broker luar.
+### 3. 🔌 USB OTG Hardware Driver & Wi-Fi OTA Serial Monitor
+- **Native Kernel USB Host Driver (`usb_device_filter.xml`):** Mendukung penuh chip **WCH CH340/CH9102**, **Silicon Labs CP2102/CP2104**, **FTDI FT232RL**, **Espressif Native USB (ESP32-S3/C3)**, dan **Arduino Official** tanpa instalasi aplikasi tambahan.
+- **Live Background Serial Reader (USB & Wi-Fi OTA):** Membaca aliran data `Serial.println()` ESP32 secara *real-time* baik melalui kabel USB OTG (`BulkTransfer Endpoint IN`) maupun nirkabel via **Wi-Fi OTA TCP Stream (Port 23)**.
+- **Auto-Reset Bootloader (`DTR/RTS`) & NVS Wi-Fi Provisioner:** Memicu ESP32 masuk ke *Flash Download Mode* langsung dari HP, serta mengganti *SSID Wi-Fi, Password, & IP Broker MQTT* ke memori NVS ESP32 lewat kabel OTG tanpa perlu kompilasi ulang kode C++!
 
-### 4. 📈 Live Oscilloscope & Serial Waveform Plotter
-- **Dual-Channel Plotter:** Visualisasikan data mentah atau pembacaan sensor analog (seperti sensor getaran, PID, atau ADC) secara real-time.
-- **Signal Analyzer:** Lengkap dengan metrik *Peak* (Min/Max) dan tombol **Freeze/Run** untuk mempermudah analisis data lapangan.
+### 4. 🎛️ Custom IoT SCADA Panel & Auto `.INO` Sketch Generator (Port 1883)
+- **Pure Native TCP MQTT v3.1.1 Engine:** Mengirim dan menguji paket protokol MQTT langsung di atas *native socket* lengkap dengan **Offline Loopback Simulator**.
+- **Auto ESP32 Sketch Generator:** Menghasilkan kode program C++ utuh (`WiFi.h` + `PubSubClient.h`) secara otomatis berdasarkan daftar *Topic* dan *Pin GPIO* yang Anda rancang di layar HP.
 
-### 5. 📦 Payload Studio & Modbus RTU CRC-16
-- **Modbus RTU CRC-16 Calculator:** Menghitung checksum heksadesimal 2-byte untuk debugging sensor industri RS485 (*Low Byte First*, polinomial `0xA001`).
-- **JSON Payload Builder:** Menguji dan menstandardisasi pengiriman format payload JSON sensor untuk broker MQTT.
-
-### 6. 🔬 Embedded Hardware Lab
-- **ESP32 Deep-Sleep Battery Estimator:** Hitung konsumsi arus rata-rata ($\text{mA}$) dan perkiraan umur baterai IoT (dalam hari/bulan) secara akurat.
-- **Voltage Divider & ADC Quantizer:** Mengukur resistor pembagi tegangan agar aman (maksimal 3.3V) bagi pin ADC 12-bit ESP32.
-- **Interactive ESP32 & ESP8266 Pinout Guide & Kamus I2C:** Referensi cepat pin yang aman digunakan serta identifikasi cepat alamat I2C (seperti `0x3C` untuk OLED, `0x76` untuk BME280) di lapangan.
+### 5. 📈 Live Oscilloscope Plotter, Modbus CRC-16 & Hardware Lab
+- **Dual-Channel Serial Waveform Plotter:** Osiloskop grafik serial *real-time* dengan fitur *Freeze/Run* dan *Peak Inspector (Min/Max)*.
+- **Industrial Modbus RTU CRC-16 & JSON Studio:** Penghitung checksum 2-byte heksadesimal (`0xA001`) untuk sensor industri RS485 dan validator JSON MQTT.
+- **Embedded Hardware Lab:** Estimator umur baterai **ESP32 Deep-Sleep**, kalkulator pembagi tegangan aman **ADC 3.3V (12-Bit)**, tabel keamanan **Pinout ESP32**, dan **Kamus Alamat Sensor I2C (`0x27`, `0x3C`, `0x76`, `0x68`)**.
 
 ---
 
-## 📚 Katalog Library Internal (20+ Pre-Installed Libraries)
-Aplikasi ini sudah dilengkapi 20 library bawaan siap pakai (tidak perlu instalasi manual):
-- **C++ Arduino:** `<WiFi.h>`, `<ESP8266WiFi.h>`, `<PubSubClient.h>`, `<Wire.h>`, `<SPI.h>`, `<Adafruit_SSD1306.h>`, `<LiquidCrystal_I2C.h>`, `<DHT.h>`, `<Adafruit_BME280.h>`, `<DallasTemperature.h>`, `<NewPing.h>`, `<ESP32Servo.h>`, `<Adafruit_NeoPixel.h>`, `<ModbusMaster.h>`, `<ArduinoJson.h>`, `<Preferences.h>`.
-- **MicroPython:** `machine` (Pin, ADC, PWM, I2C, UART), `ssd1306`, `dht`, `hcsr04`, `neopixel`, `umqtt.simple`, `urequests`.
-
----
-
-## 🛠️ Stack Teknologi & Driver API
-- **UI & Graphics:** Kotlin, Jetpack Compose, Canvas-based Custom 3D Vector & Bezier Curves.
-- **USB & Serial Driver:** Android USB Host API (`bulkTransfer` on Endpoint IN & OUT), USB Request `controlTransfer` (DTR, RTS, Baudrate Config), Android Bluetooth Adapter API.
-- **Data & Engine:** Pure Kotlin TCP Socket (Zero Dependencies MQTT v3.1.1 Packet Builder), Modbus RTU Checksum Engine, Slidin Scale Resistor EIA 4-Band Multiplier.
+## 📚 Katalog 20+ Library Internal (Pre-Installed)
+- **C++ Arduino:** `<WiFi.h>`, `<ESP8266WiFi.h>`, `<PubSubClient.h>`, `<BlynkSimpleEsp32.h>`, `<Wire.h>`, `<SPI.h>`, `<Adafruit_SSD1306.h>`, `<LiquidCrystal_I2C.h>`, `<DHT.h>`, `<Adafruit_BME280.h>`, `<DallasTemperature.h>`, `<NewPing.h>`, `<ESP32Servo.h>`, `<Adafruit_NeoPixel.h>`, `<Adafruit_MPU6050.h>`, `<BH1750.h>`, `<Adafruit_INA219.h>`, `<ModbusMaster.h>`, `<ArduinoJson.h>`, `<Preferences.h>`.
+- **MicroPython:** `machine` (Pin, ADC, PWM, I2C, UART), `ssd1306`, `dht`, `hcsr04`, `neopixel`, `umqtt.simple`, `blynklib`, `urequests`.
 
 ---
 
