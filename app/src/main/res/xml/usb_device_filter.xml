@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 1. WCH CH340 / CH341 / CH9102 (ESP32 & Arduino Clone Populer) -->
+    <usb-device vendor-id="6790" product-id="29987" /> <!-- 0x1A86 : 0x7523 (CH340) -->
+    <usb-device vendor-id="6790" product-id="21795" /> <!-- 0x1A86 : 0x5523 (CH341) -->
+    <usb-device vendor-id="6790" product-id="21972" /> <!-- 0x1A86 : 0x55D4 (CH9102F ESP32) -->
+
+    <!-- 2. Silicon Labs CP2102 / CP2104 / CP210x (ESP32 DevKit V1 Standar) -->
+    <usb-device vendor-id="4292" product-id="60000" /> <!-- 0x10C4 : 0xEA60 -->
+    <usb-device vendor-id="4292" product-id="60016" /> <!-- 0x10C4 : 0xEA70 -->
+
+    <!-- 3. FTDI FT232RL / FT231X (Industrial Serial & ESP32-CAM Programmer) -->
+    <usb-device vendor-id="1027" product-id="24577" /> <!-- 0x0403 : 0x6001 -->
+    <usb-device vendor-id="1027" product-id="24597" /> <!-- 0x0403 : 0x6015 -->
+
+    <!-- 4. Espressif Systems Native USB (ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6) -->
+    <usb-device vendor-id="12346" product-id="4097" /> <!-- 0x303A : 0x1001 -->
+    <usb-device vendor-id="12346" product-id="2" />    <!-- 0x303A : 0x0002 -->
+
+    <!-- 5. Arduino Official (Uno / Mega / Leonardo ATmega16U2) -->
+    <usb-device vendor-id="9025" />                    <!-- 0x2341 (Semua Board Arduino Resmi) -->
+</resources>
