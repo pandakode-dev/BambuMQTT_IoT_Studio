@@ -9,7 +9,8 @@ BambuMQTT adalah aplikasi panel kontrol *Internet of Things* (IoT), studio dashb
 
 | Panel SCADA MQTT | Kanvas Wokwi Sim | Blynk IoT Dashboard | USB OTG & Wi-Fi OTA | Live Code IDE & OTA | Lab MCU & Kamus I2C |
 | :---: | :---: | :---: | :---: | :---: | :---: |
-| *(Tarik SS 1)* | *(Tarik SS 2)* | *(Tarik SS 3)* | *(Tarik SS 4)* | *(Tarik SS 5)* | *(Tarik SS 6)* |
+| <img width="1080" height="2400" alt="Panel SCADA MQTT" src="https://github.com/user-attachments/assets/3df22ea0-ffb8-4ca6-8ae2-d56fff91a9d6" /> | <img width="1080" height="2400" alt="Kanvas Wokwi Sim" src="https://github.com/user-attachments/assets/dceb5fe1-2a28-4feb-8d0b-5f461b52d111" /> | <img width="1080" height="2400" alt="Blynk IoT Dashboard" src="https://github.com/user-attachments/assets/d78e6687-e59e-4b13-84c6-c90d68abbf71" /> | <img width="1080" height="2400" alt="USB OTG   Wi-Fi OTA" src="https://github.com/user-attachments/assets/83f8ec5f-bc96-41b0-a66d-98465ec125c7" /> | <img width="1080" height="2400" alt="Live Code IDE   OTA" src="https://github.com/user-attachments/assets/eee70506-f572-411b-afc0-d6deeb787d9a" />
+ | <img width="1080" height="2400" alt="Lab MCU   Kamus I2C" src="https://github.com/user-attachments/assets/6baccae6-aa5f-4f74-8bdd-cc0952425507" /> |
 
 ---
 
