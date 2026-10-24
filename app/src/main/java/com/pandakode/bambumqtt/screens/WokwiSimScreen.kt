@@ -1,7 +1,5 @@
 package com.pandakode.bambumqtt.ui.screens
 
-import android.graphics.Paint
-import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,6 +8,8 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,124 +27,39 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawBuzzerWith2Pins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawDht22With4Pins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawHcsr04With4Pins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawLedWithPins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawMcuVariantBoard
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawOledWith4Pins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawOrthogonalWire
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawPotentiometerWith3Pins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawRelayWith3Pins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawResistor4BandWithPins
+import com.pandakode.bambumqtt.ui.screens.WokwiSimRenderEngine.drawServoWith3Pins
 import com.pandakode.bambumqtt.ui.theme.*
 import kotlinx.coroutines.delay
-import kotlin.math.hypot
-import kotlin.math.log10
-import kotlin.math.pow
-
-// =========================================================================
-// GLOBAL CACHED PAINTS & PATH (ZERO ALLOCATION DI DALAM DRAW LOOP = ANTI LAG!)
-// =========================================================================
-
-private val SharedPinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    textSize = 13f
-    typeface = Typeface.MONOSPACE
-    isFakeBoldText = true
-}
-
-private val SharedTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    textSize = 17f
-    isFakeBoldText = true
-}
-
-private val SharedWirePath = Path()
-
-// =========================================================================
-// ENUM & DATA MODEL UNTUK DASHBOARD IOT GAYA BLYNK
-// =========================================================================
-
-enum class DashWidgetType(val label: String) {
-    TOGGLE_SWITCH("Switch Relay"),
-    PUSH_BUTTON("Push Button"),
-    KNOB_ROTARY("Rotary Knob"),
-    SLIDER_LEVEL("PWM Slider"),
-    GAUGE_RADIAL("Radial Gauge"),
-    VALUE_DISPLAY("Digital Value"),
-    LED_INDICATOR("Status LED"),
-    RGB_COLOR_PICKER("RGB Zebra Picker"),
-    HISTORICAL_CHART("SuperChart Live"),
-    STEP_INPUT("Step Control (+/-)"),
-    LCD_16X2("Virtual LCD 16x2"),
-    TERMINAL_MINI("Blynk Terminal")
-}
-
-data class DashWidget(
-    val id: String,
-    val type: DashWidgetType,
-    val title: String,
-    val topic: String,
-    val pin: String,
-    var value: Float = 0f,
-    var isOn: Boolean = false,
-    val unit: String = "",
-    val color: Color = CopperGold,
-    val max: Float = 100f
-)
-
-// =========================================================================
-// ENUM & DATA MODEL KOMPONEN DENGAN STATE KOORDINAT LANGSUNG (ZERO-LAG!)
-// =========================================================================
-
-enum class SimCompType(val title: String, val pinNames: List<String>, val hitWidth: Float, val hitHeight: Float) {
-    ESP32_BOARD("ESP32 / ESP8266 MCU", listOf("3V3", "5V", "GND", "D2", "D4", "D5", "D18", "D19", "D21", "D22", "D34"), 185f, 265f),
-    LED_LAMP("LED 5mm Merah", listOf("A+", "K-"), 70f, 95f),
-    RESISTOR_4BAND("Resistor 4-Gelang", listOf("P1", "P2"), 130f, 60f),
-    DHT22_SENSOR("Sensor Suhu DHT22", listOf("VCC", "DATA", "NC", "GND"), 105f, 130f),
-    OLED_SSD1306("OLED 0.96\" I2C", listOf("GND", "VCC", "SCL", "SDA"), 148f, 105f),
-    SERVO_SG90("Motor Servo SG90", listOf("GND", "VCC", "SIG"), 105f, 100f),
-    HCSR04_SONAR("Ultrasonik HC-SR04", listOf("VCC", "TRIG", "ECHO", "GND"), 135f, 100f),
-    RELAY_1CH("Modul Relay 1CH", listOf("VCC", "GND", "IN"), 100f, 105f),
-    BUZZER_ACTIVE("Buzzer Piezo", listOf("VCC+", "GND-"), 80f, 95f),
-    POTENTIOMETER("Potensiometer Analog", listOf("VCC", "OUT", "GND"), 90f, 95f)
-}
-
-@Stable
-class SimComponent(
-    val id: String,
-    val type: SimCompType,
-    val label: String,
-    initialX: Float,
-    initialY: Float
-) {
-    // Koordinat disimpan sebagai MutableFloatState agar saat digeser TIDAK merecompose List!
-    var x by mutableFloatStateOf(initialX)
-    var y by mutableFloatStateOf(initialY)
-}
-
-data class classPinWireConnection(
-    val id: String,
-    val fromCompId: String,
-    val fromPinName: String,
-    val toMcuPin: String,
-    val wireColor: Color
-)
-
-data class BuiltInLibInfo(
-    val headerName: String,
-    val lang: String,
-    val category: String,
-    val supportedHardware: String,
-    val exampleApi: String
-)
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun WokwiSimScreen() {
     var activeSubTab by remember { mutableIntStateOf(0) }
     val subTabs = listOf("Kanvas Sirkuit", "Blynk IoT Dash", "Koding C++/Py", "20+ Library")
 
-    var mcuBoardModel by remember { mutableStateOf("ESP32") }
+    // Varian Board MCU yang dipilih (8 Pilihan Board!)
+    var selectedBoardVariant by remember { mutableStateOf(McuBoardVariant.ESP32_30PIN) }
     var isSimRunning by remember { mutableStateOf(false) }
+    var showLiveSerialDrawer by remember { mutableStateOf(true) }
     var simTick by remember { mutableIntStateOf(0) }
 
     // Parameter Interaktif Komponen
@@ -161,43 +76,54 @@ fun WokwiSimScreen() {
     var buzzerActive by remember { mutableStateOf(false) }
     var selectedColor by remember { mutableStateOf(Color.Red) }
 
-    var simSerialOutput by remember {
-        mutableStateOf("[ZERO-LAG ENGINE] Geser komponen langsung atau Ketuk Komponen -> Ketuk Titik Tujuan!")
+    // State Koneksi Virtual Wi-Fi & Blynk Cloud
+    var isVirtualWifiConnected by remember { mutableStateOf(false) }
+    var simSerialLogs by remember {
+        mutableStateOf(
+            listOf(
+                "[SYSTEM] BambuSim Virtual MCU Ready (${McuBoardVariant.ESP32_30PIN.displayName})",
+                "[NET] Gunakan SSID: \"${BambuVirtualNetwork.VIRTUAL_SSID}\" & Pass: \"${BambuVirtualNetwork.VIRTUAL_PASS}\" untuk konek ke Blynk!"
+            )
+        )
+    }
+
+    fun appendSimSerial(msg: String) {
+        val time = SimpleDateFormat("HH:mm:ss.SS", Locale.getDefault()).format(Date())
+        simSerialLogs = (simSerialLogs + "[$time] $msg").takeLast(60)
     }
 
     // 12 Widget Lengkap ala Blynk IoT
     var dashboardWidgets by remember {
         mutableStateOf(
             listOf(
-                DashWidget("dw1", DashWidgetType.TOGGLE_SWITCH, "Pompa Irigasi (V1)", "bambu/relay/pump", "D2", isOn = false, color = Color(0xFF00E676)),
-                DashWidget("dw2", DashWidgetType.PUSH_BUTTON, "Alarm Buzzer (V2)", "bambu/act/beep", "D5", color = Color(0xFFFF1744)),
-                DashWidget("dw3", DashWidgetType.KNOB_ROTARY, "Sudut Servo (V3)", "bambu/pwm/servo", "D18", value = 90f, max = 180f, unit = "°", color = CopperOrange),
-                DashWidget("dw4", DashWidgetType.SLIDER_LEVEL, "Dimmer PWM (V4)", "bambu/pwm/led", "D2", value = 200f, max = 255f, color = Color(0xFF00E5FF)),
-                DashWidget("dw5", DashWidgetType.GAUGE_RADIAL, "Suhu DHT22 (V5)", "bambu/sensor/temp", "D4", value = 31.4f, max = 100f, unit = "°C", color = Color(0xFFFF5252)),
-                DashWidget("dw6", DashWidgetType.VALUE_DISPLAY, "Jarak Sonar (V6)", "bambu/sensor/sonar", "D19", value = 45f, max = 200f, unit = " cm", color = Color(0xFF2979FF)),
-                DashWidget("dw7", DashWidgetType.LED_INDICATOR, "Status Overheat (V7)", "bambu/status/heat", "D19", isOn = false, color = Color(0xFFFF1744)),
-                DashWidget("dw8", DashWidgetType.RGB_COLOR_PICKER, "RGB NeoPixel (V8)", "bambu/color", "D5", color = Color.Red),
-                DashWidget("dw9", DashWidgetType.STEP_INPUT, "Setpoint Thermostat", "bambu/setpoint", "D34", value = 36f, max = 80f, unit = "°C", color = Color(0xFFE040FB)),
-                DashWidget("dw10", DashWidgetType.HISTORICAL_CHART, "SuperChart Suhu", "bambu/history/temp", "D4", value = 31.4f, max = 100f, color = Color(0xFF00E5FF)),
-                DashWidget("dw11", DashWidgetType.LCD_16X2, "Blynk LCD 16x2 (V11)", "bambu/lcd", "I2C", value = 31.4f, color = Color(0xFF00E676)),
-                DashWidget("dw12", DashWidgetType.TERMINAL_MINI, "Cloud Terminal (V12)", "bambu/term", "TX/RX", color = CopperGold)
+                DashWidget("dw1", DashWidgetType.TOGGLE_SWITCH, "Pompa Irigasi (V1)", "bambu/relay/pump", "V1 / D2", isOn = false, color = Color(0xFF00E676)),
+                DashWidget("dw2", DashWidgetType.PUSH_BUTTON, "Alarm Buzzer (V2)", "bambu/act/beep", "V2 / D5", color = Color(0xFFFF1744)),
+                DashWidget("dw3", DashWidgetType.KNOB_ROTARY, "Sudut Servo (V3)", "bambu/pwm/servo", "V3 / D18", value = 90f, max = 180f, unit = "°", color = CopperOrange),
+                DashWidget("dw4", DashWidgetType.SLIDER_LEVEL, "Dimmer PWM (V4)", "bambu/pwm/led", "V4 / D2", value = 200f, max = 255f, color = Color(0xFF00E5FF)),
+                DashWidget("dw5", DashWidgetType.GAUGE_RADIAL, "Suhu DHT22 (V5)", "bambu/sensor/temp", "V5 / D4", value = 31.4f, max = 100f, unit = "°C", color = Color(0xFFFF5252)),
+                DashWidget("dw6", DashWidgetType.VALUE_DISPLAY, "Jarak Sonar (V6)", "bambu/sensor/sonar", "V6 / D19", value = 45f, max = 200f, unit = " cm", color = Color(0xFF2979FF)),
+                DashWidget("dw7", DashWidgetType.LED_INDICATOR, "Status Overheat (V7)", "bambu/status/heat", "V7", isOn = false, color = Color(0xFFFF1744)),
+                DashWidget("dw8", DashWidgetType.RGB_COLOR_PICKER, "RGB NeoPixel (V8)", "bambu/color", "V8", color = Color.Red),
+                DashWidget("dw9", DashWidgetType.STEP_INPUT, "Setpoint Thermostat", "bambu/setpoint", "V9", value = 36f, max = 80f, unit = "°C", color = Color(0xFFE040FB)),
+                DashWidget("dw10", DashWidgetType.HISTORICAL_CHART, "SuperChart Suhu", "bambu/history/temp", "V10", value = 31.4f, max = 100f, color = Color(0xFF00E5FF)),
+                DashWidget("dw11", DashWidgetType.LCD_16X2, "Blynk LCD 16x2 (V11)", "bambu/lcd", "V11", value = 31.4f, color = Color(0xFF00E676)),
+                DashWidget("dw12", DashWidgetType.TERMINAL_MINI, "Cloud Terminal (V12)", "bambu/term", "V12", color = CopperGold)
             )
         )
     }
 
-    // Daftar Komponen Menggunakan mutableStateListOf Agar Sangat Ringan!
+    // Posisi Awal Komponen yang Sudah Tersusun Rapi (3 Kolom Grid)
     val components = remember {
         mutableStateListOf(
-            SimComponent("mcu", SimCompType.ESP32_BOARD, "ESP32 DevKit", 14f, 40f),
-            SimComponent("res1", SimCompType.RESISTOR_4BAND, "Resistor", 250f, 18f),
-            SimComponent("led1", SimCompType.LED_LAMP, "LED Merah", 435f, 10f),
-            SimComponent("dht1", SimCompType.DHT22_SENSOR, "DHT22", 545f, 20f),
-            SimComponent("oled1", SimCompType.OLED_SSD1306, "OLED I2C", 255f, 195f),
-            SimComponent("servo1", SimCompType.SERVO_SG90, "Servo SG90", 455f, 195f)
+            SimComponent("mcu", SimCompType.ESP32_BOARD, "MCU", 12f, 22f),
+            SimComponent("res1", SimCompType.RESISTOR_4BAND, "Resistor", 248f, 18f),
+            SimComponent("led1", SimCompType.LED_LAMP, "LED Merah", 420f, 18f),
+            SimComponent("dht1", SimCompType.DHT22_SENSOR, "DHT22", 592f, 18f),
+            SimComponent("oled1", SimCompType.OLED_SSD1306, "OLED I2C", 248f, 156f),
+            SimComponent("servo1", SimCompType.SERVO_SG90, "Servo SG90", 420f, 156f)
         )
     }
 
-    // Daftar Kabel Jumper Pin-ke-Pin
     var wires by remember {
         mutableStateOf(
             listOf(
@@ -218,50 +144,53 @@ fun WokwiSimScreen() {
         )
     }
 
+    fun isPowerPin(pin: String) = pin in listOf("3V3", "5V", "VIN", "VBUS", "VSYS", "VU")
+    fun isSignalPin(pin: String) = pin.startsWith("D") || pin.startsWith("GP") || pin.startsWith("A") || pin in listOf("TX", "RX", "RX0", "TX0")
+
     fun isComponentPoweredAndWired(comp: SimComponent): Boolean {
         val compWires = wires.filter { it.fromCompId == comp.id }
         return when (comp.type) {
             SimCompType.ESP32_BOARD -> true
             SimCompType.RESISTOR_4BAND -> compWires.isNotEmpty()
             SimCompType.LED_LAMP -> {
-                compWires.any { it.fromPinName == "A+" && it.toMcuPin.startsWith("D") } &&
+                compWires.any { it.fromPinName == "A+" && isSignalPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "K-" && it.toMcuPin == "GND" }
             }
             SimCompType.DHT22_SENSOR -> {
-                compWires.any { it.fromPinName == "VCC" && (it.toMcuPin == "3V3" || it.toMcuPin == "5V") } &&
+                compWires.any { it.fromPinName == "VCC" && isPowerPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "GND" && it.toMcuPin == "GND" } &&
-                        compWires.any { it.fromPinName == "DATA" && it.toMcuPin.startsWith("D") }
+                        compWires.any { it.fromPinName == "DATA" && isSignalPin(it.toMcuPin) }
             }
             SimCompType.OLED_SSD1306 -> {
-                compWires.any { it.fromPinName == "VCC" && (it.toMcuPin == "3V3" || it.toMcuPin == "5V") } &&
+                compWires.any { it.fromPinName == "VCC" && isPowerPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "GND" && it.toMcuPin == "GND" } &&
-                        compWires.any { it.fromPinName == "SCL" && it.toMcuPin == "D22" } &&
-                        compWires.any { it.fromPinName == "SDA" && it.toMcuPin == "D21" }
+                        compWires.any { it.fromPinName == "SCL" && isSignalPin(it.toMcuPin) } &&
+                        compWires.any { it.fromPinName == "SDA" && isSignalPin(it.toMcuPin) }
             }
             SimCompType.SERVO_SG90 -> {
-                compWires.any { it.fromPinName == "VCC" && (it.toMcuPin == "5V" || it.toMcuPin == "3V3") } &&
+                compWires.any { it.fromPinName == "VCC" && isPowerPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "GND" && it.toMcuPin == "GND" } &&
-                        compWires.any { it.fromPinName == "SIG" && it.toMcuPin.startsWith("D") }
+                        compWires.any { it.fromPinName == "SIG" && isSignalPin(it.toMcuPin) }
             }
             SimCompType.HCSR04_SONAR -> {
-                compWires.any { it.fromPinName == "VCC" && (it.toMcuPin == "5V" || it.toMcuPin == "3V3") } &&
+                compWires.any { it.fromPinName == "VCC" && isPowerPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "GND" && it.toMcuPin == "GND" } &&
-                        compWires.any { it.fromPinName == "TRIG" && it.toMcuPin.startsWith("D") } &&
-                        compWires.any { it.fromPinName == "ECHO" && it.toMcuPin.startsWith("D") }
+                        compWires.any { it.fromPinName == "TRIG" && isSignalPin(it.toMcuPin) } &&
+                        compWires.any { it.fromPinName == "ECHO" && isSignalPin(it.toMcuPin) }
             }
             SimCompType.RELAY_1CH -> {
-                compWires.any { it.fromPinName == "VCC" && (it.toMcuPin == "5V" || it.toMcuPin == "3V3") } &&
+                compWires.any { it.fromPinName == "VCC" && isPowerPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "GND" && it.toMcuPin == "GND" } &&
-                        compWires.any { it.fromPinName == "IN" && it.toMcuPin.startsWith("D") }
+                        compWires.any { it.fromPinName == "IN" && isSignalPin(it.toMcuPin) }
             }
             SimCompType.BUZZER_ACTIVE -> {
-                compWires.any { it.fromPinName == "VCC+" && it.toMcuPin.startsWith("D") } &&
+                compWires.any { it.fromPinName == "VCC+" && isSignalPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "GND-" && it.toMcuPin == "GND" }
             }
             SimCompType.POTENTIOMETER -> {
-                compWires.any { it.fromPinName == "VCC" && (it.toMcuPin == "3V3" || it.toMcuPin == "5V") } &&
+                compWires.any { it.fromPinName == "VCC" && isPowerPin(it.toMcuPin) } &&
                         compWires.any { it.fromPinName == "GND" && it.toMcuPin == "GND" } &&
-                        compWires.any { it.fromPinName == "OUT" && it.toMcuPin == "D34" }
+                        compWires.any { it.fromPinName == "OUT" && isSignalPin(it.toMcuPin) }
             }
         }
     }
@@ -270,31 +199,61 @@ fun WokwiSimScreen() {
     var simCodeText by remember {
         mutableStateOf(
             """
+            #include <WiFi.h>
+            #include <BlynkSimpleEsp32.h>
             #include <Wire.h>
             #include <Adafruit_SSD1306.h>
             #include <DHT.h>
             #include <ESP32Servo.h>
-            #include <NewPing.h>
+
+            // Kredensial Virtual Wi-Fi & Blynk Khusus BambuSim:
+            char auth[] = "${BambuVirtualNetwork.VIRTUAL_BLYNK_TOKEN}";
+            char ssid[] = "${BambuVirtualNetwork.VIRTUAL_SSID}";
+            char pass[] = "${BambuVirtualNetwork.VIRTUAL_PASS}";
 
             void setup() {
               Serial.begin(115200);
+              Blynk.begin(auth, ssid, pass);
               pinMode(2, OUTPUT);
               display.println("PANDAKODE IOT");
               servo.write(135);
             }
 
             void loop() {
+              Blynk.run();
               digitalWrite(2, HIGH);
-              Serial.println("Sensor Active & Power Verified!");
+              Serial.println("Telemetry Sent to Blynk V5 & OLED!");
               delay(1000);
             }
             """.trimIndent()
         )
     }
 
-    // Engine Eksekusi Sirkuit & Sinkronisasi ke Blynk Dashboard
-    LaunchedEffect(isSimRunning, simCodeText, dhtTempC, ultrasonicCm, resistorOhms, wires) {
-        if (!isSimRunning) return@LaunchedEffect
+    // Engine Eksekusi Sirkuit, Live Serial Monitor & Virtual Wi-Fi Blynk
+    LaunchedEffect(isSimRunning) {
+        if (!isSimRunning) {
+            isVirtualWifiConnected = false
+            return@LaunchedEffect
+        }
+        showLiveSerialDrawer = true
+        simSerialLogs = emptyList()
+        appendSimSerial("Booting ${selectedBoardVariant.displayName} (${selectedBoardVariant.chipName})...")
+        delay(350L)
+
+        // Cek apakah koding menggunakan SSID & Password Virtual Wi-Fi kita
+        val hasValidSsid = simCodeText.contains(BambuVirtualNetwork.VIRTUAL_SSID)
+        val hasValidPass = simCodeText.contains(BambuVirtualNetwork.VIRTUAL_PASS)
+        if (hasValidSsid && hasValidPass) {
+            appendSimSerial("Connecting to Virtual Wi-Fi SSID: \"${BambuVirtualNetwork.VIRTUAL_SSID}\"...")
+            delay(400L)
+            isVirtualWifiConnected = true
+            appendSimSerial("✅ Wi-Fi Connected! Virtual IP: 10.10.88.24 | Gateway: 10.10.88.1")
+            appendSimSerial("☁️ Blynk Auth Token Verified (${BambuVirtualNetwork.VIRTUAL_BLYNK_TOKEN}) -> ONLINE!")
+        } else {
+            isVirtualWifiConnected = false
+            appendSimSerial("⚠️ Virtual Wi-Fi Offline (Gunakan SSID: \"${BambuVirtualNetwork.VIRTUAL_SSID}\" & Pass: \"${BambuVirtualNetwork.VIRTUAL_PASS}\")")
+        }
+
         while (isSimRunning) {
             simTick++
 
@@ -326,30 +285,30 @@ fun WokwiSimScreen() {
             }
 
             val codeTriggersHigh = simCodeText.contains("HIGH") || simCodeText.contains(".on()")
-            val blynkSwitchOn = dashboardWidgets.find { it.id == "dw1" }?.isOn == true
+            val blynkSwitchOn = isVirtualWifiConnected && (dashboardWidgets.find { it.id == "dw1" }?.isOn == true)
             ledRedActive = isLedWired && ((codeTriggersHigh && simTick % 2 == 1) || blynkSwitchOn)
             relayActive = relayComp != null && isComponentPoweredAndWired(relayComp) && (codeTriggersHigh || blynkSwitchOn)
             buzzerActive = (buzzerComp != null && isComponentPoweredAndWired(buzzerComp) && (simTick % 2 == 1)) ||
-                    (dashboardWidgets.find { it.id == "dw2" }?.isOn == true)
+                    (isVirtualWifiConnected && dashboardWidgets.find { it.id == "dw2" }?.isOn == true)
 
-            dashboardWidgets = dashboardWidgets.map { widget ->
-                when (widget.id) {
-                    "dw5" -> widget.copy(value = dhtTempC)
-                    "dw6" -> widget.copy(value = ultrasonicCm)
-                    "dw10" -> widget.copy(value = dhtTempC)
-                    "dw7" -> widget.copy(isOn = dhtTempC > 40f)
-                    else -> widget
+            if (isVirtualWifiConnected) {
+                dashboardWidgets = dashboardWidgets.map { widget ->
+                    when (widget.id) {
+                        "dw5" -> widget.copy(value = dhtTempC)
+                        "dw6" -> widget.copy(value = ultrasonicCm)
+                        "dw10" -> widget.copy(value = dhtTempC)
+                        "dw7" -> widget.copy(isOn = dhtTempC > 40f)
+                        else -> widget
+                    }
                 }
             }
 
-            val unwiredList = components.filter { it.type != SimCompType.ESP32_BOARD && !isComponentPoweredAndWired(it) }
-            simSerialOutput = if (unwiredList.isEmpty()) {
-                "[TICK #$simTick] ✅ ALL POWERED | D2=${if (ledRedActive) "HIGH" else "LOW"} | DHT=${dhtTempC}°C | Servo=${servoAngle.toInt()}°"
-            } else {
-                "⚠️ UNWIRED: [${unwiredList.joinToString { it.label }}] -> Klik '🔌 Kabel' lalu klik 'Auto-Wire'!"
-            }
+            // Ekstrak isi Serial.println(...) atau print(...) dari kode pengguna untuk ditampilkan di Live Serial Monitor!
+            val serialPrintMatch = Regex("""(?:Serial\.println|print)\(\s*"([^"]+)"""").find(simCodeText)
+            val userPrint = serialPrintMatch?.groupValues?.get(1) ?: "Loop tick"
+            appendSimSerial("$userPrint | T=${String.format("%.1f", dhtTempC)}°C | R=${ResistorCatalog.formatOhmLabel(resistorOhms)} | LED=${if (ledRedActive) "ON" else "OFF"}")
 
-            delay(800L)
+            delay(950L)
         }
     }
 
@@ -384,20 +343,28 @@ fun WokwiSimScreen() {
 
         when (activeSubTab) {
             0 -> WokwiZeroLagWorkbench(
-                mcuBoardModel = mcuBoardModel,
-                onToggleMcuModel = { mcuBoardModel = if (mcuBoardModel == "ESP32") "ESP8266" else "ESP32" },
+                selectedBoardVariant = selectedBoardVariant,
+                onSelectBoardVariant = { newVariant ->
+                    selectedBoardVariant = newVariant
+                    appendSimSerial("Board diganti ke: ${newVariant.displayName} (${newVariant.totalPhysicalPins} Pin)")
+                },
                 components = components,
                 wires = wires,
                 onWiresChange = { wires = it },
                 checkPowered = { isComponentPoweredAndWired(it) },
                 isSimRunning = isSimRunning,
+                isVirtualWifiConnected = isVirtualWifiConnected,
                 onToggleRun = {
                     isSimRunning = !isSimRunning
                     if (!isSimRunning) {
                         ledRedActive = false
-                        simSerialOutput = "[STOPPED] Simulasi dihentikan."
+                        appendSimSerial("🛑 Simulasi dihentikan oleh pengguna.")
                     }
                 },
+                showLiveSerialDrawer = showLiveSerialDrawer,
+                onToggleSerialDrawer = { showLiveSerialDrawer = !showLiveSerialDrawer },
+                simSerialLogs = simSerialLogs,
+                onClearSerialLogs = { simSerialLogs = emptyList() },
                 ledRedOn = ledRedActive,
                 relayActive = relayActive,
                 buzzerActive = buzzerActive,
@@ -410,14 +377,14 @@ fun WokwiSimScreen() {
                 potPercent = potPercent,
                 servoAngle = servoAngle,
                 oledLine1 = oledLine1,
-                oledLine2 = oledLine2,
-                simSerialOutput = simSerialOutput
+                oledLine2 = oledLine2
             )
 
             1 -> BlynkDashboardPanel(
                 widgets = dashboardWidgets,
                 onWidgetsChange = { dashboardWidgets = it },
                 isSimRunning = isSimRunning,
+                isVirtualWifiConnected = isVirtualWifiConnected,
                 selectedColor = selectedColor,
                 onColorChange = { selectedColor = it },
                 dhtTempC = dhtTempC,
@@ -430,33 +397,47 @@ fun WokwiSimScreen() {
                     codeLang = lang
                     simCodeText = if (lang == "CPP") {
                         """
+                        #include <WiFi.h>
+                        #include <BlynkSimpleEsp32.h>
                         #include <Wire.h>
                         #include <Adafruit_SSD1306.h>
                         #include <DHT.h>
                         #include <ESP32Servo.h>
 
+                        char auth[] = "${BambuVirtualNetwork.VIRTUAL_BLYNK_TOKEN}";
+                        char ssid[] = "${BambuVirtualNetwork.VIRTUAL_SSID}";
+                        char pass[] = "${BambuVirtualNetwork.VIRTUAL_PASS}";
+
                         void setup() {
                           Serial.begin(115200);
+                          Blynk.begin(auth, ssid, pass);
                           pinMode(2, OUTPUT);
                           display.println("BAMBUSIM C++");
                           servo.write(120);
                         }
 
                         void loop() {
+                          Blynk.run();
                           digitalWrite(2, HIGH);
+                          Serial.println("ESP32 Telemetry OK!");
                           delay(1000);
                         }
                         """.trimIndent()
                     } else {
                         """
-                        from machine import Pin, I2C, PWM
-                        import ssd1306, dht, time
+                        # MicroPython + Virtual Wi-Fi Blynk
+                        import network, blynklib, ssd1306, dht, time
+                        from machine import Pin
+
+                        WIFI_SSID = "${BambuVirtualNetwork.VIRTUAL_SSID}"
+                        WIFI_PASS = "${BambuVirtualNetwork.VIRTUAL_PASS}"
+                        BLYNK_AUTH = "${BambuVirtualNetwork.VIRTUAL_BLYNK_TOKEN}"
 
                         led = Pin(2, Pin.OUT)
                         while True:
                             led.on()
                             oled.text("MICROPYTHON OK", 0, 0)
-                            servo.angle(120)
+                            print("MicroPython Tick Sent to Blynk!")
                             time.sleep(1)
                         """.trimIndent()
                     }
@@ -474,20 +455,21 @@ fun WokwiSimScreen() {
     }
 }
 
-// =========================================================================
-// WORKBENCH KANVAS ZERO-LAG (DIKELUARKAN DARI VERTICAL SCROLL AGAR 100% MULUS!)
-// =========================================================================
-
 @Composable
 fun WokwiZeroLagWorkbench(
-    mcuBoardModel: String,
-    onToggleMcuModel: () -> Unit,
+    selectedBoardVariant: McuBoardVariant,
+    onSelectBoardVariant: (McuBoardVariant) -> Unit,
     components: MutableList<SimComponent>,
     wires: List<classPinWireConnection>,
     onWiresChange: (List<classPinWireConnection>) -> Unit,
     checkPowered: (SimComponent) -> Boolean,
     isSimRunning: Boolean,
+    isVirtualWifiConnected: Boolean,
     onToggleRun: () -> Unit,
+    showLiveSerialDrawer: Boolean,
+    onToggleSerialDrawer: () -> Unit,
+    simSerialLogs: List<String>,
+    onClearSerialLogs: () -> Unit,
     ledRedOn: Boolean,
     relayActive: Boolean,
     buzzerActive: Boolean,
@@ -500,200 +482,283 @@ fun WokwiZeroLagWorkbench(
     potPercent: Float,
     servoAngle: Float,
     oledLine1: String,
-    oledLine2: String,
-    simSerialOutput: String
+    oledLine2: String
 ) {
     var showAddPartDialog by remember { mutableStateOf(false) }
+    var showBoardPickerDialog by remember { mutableStateOf(false) }
     var showWireManagerDialog by remember { mutableStateOf(false) }
+    var isWireEditMode by remember { mutableStateOf(false) } // Mode Geser Titik Belok & Ganti Warna Kabel!
+    var selectedWire by remember { mutableStateOf<classPinWireConnection?>(wires.firstOrNull()) }
     var selectedComp by remember { mutableStateOf<SimComponent?>(components.getOrNull(1)) }
-    val presetResistorValues = listOf(100, 220, 330, 470, 1000, 4700, 10000)
+    var canvasSize by remember { mutableStateOf(Size(800f, 360f)) }
 
-    // Fungsi Auto-Layout: Merapikan semua komponen yang menumpuk dalam 1 klik!
-    fun autoArrangeComponents() {
-        val mcu = components.find { it.type == SimCompType.ESP32_BOARD }
-        mcu?.let {
-            it.x = 12f
-            it.y = 35f
-        }
-        val others = components.filter { it.type != SimCompType.ESP32_BOARD }
-        others.forEachIndexed { index, comp ->
-            val col = index % 2
-            val row = index / 2
-            comp.x = 245f + col * 195f
-            comp.y = 18f + row * 125f
-        }
-    }
-
-    // PENTING: Column utama TIDAK memakai verticalScroll di sekitar Canvas agar sentuhan jari 100% mulus!
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // 1. TOOLBAR ATAS RINGKAS
+        // 1. TOOLBAR ATAS: PILIH BOARD, + PART, KABEL, MODE GESER KABEL, AUTO-RAPIKAN, & RUN
         Card(
             colors = CardDefaults.cardColors(containerColor = PcbEmeraldDark),
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Button(
+                        onClick = { showBoardPickerDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = CopperOrange),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Button(
-                            onClick = { showAddPartDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = CopperGold),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("+ Komponen", color = SiliconDark, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
-                        }
-
-                        Button(
-                            onClick = { showWireManagerDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = LogicCyan),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🔌 Kabel (${wires.size})", color = SiliconDark, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
-                        }
-
-                        // TOMBOL BARU: RAPIKAN POSISI OTOMATIS (ANTI NUMPUK!)
-                        Button(
-                            onClick = { autoArrangeComponents() },
-                            colors = ButtonDefaults.buttonColors(containerColor = LogicViolet),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("✨ Auto-Rapikan", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = onToggleMcuModel,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(mcuBoardModel, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                        }
+                        Icon(Icons.Default.DeveloperBoard, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(selectedBoardVariant.displayName.substringBefore(" ("), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, maxLines = 1)
                     }
-
-                    Spacer(modifier = Modifier.width(6.dp))
 
                     Button(
-                        onClick = onToggleRun,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isSimRunning) Color(0xFFD32F2F) else Color(0xFF00E676)
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        shape = RoundedCornerShape(10.dp)
+                        onClick = { showAddPartDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = CopperGold),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(
-                            imageVector = if (isSimRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = if (isSimRunning) Color.White else SiliconDark,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
+                        Text("+ Sensor/Part", color = SiliconDark, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, maxLines = 1)
+                    }
+
+                    Button(
+                        onClick = { showWireManagerDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = LogicCyan),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("🔌 Pin (${wires.size})", color = SiliconDark, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, maxLines = 1)
+                    }
+
+                    // TOMBOL BARU: MODE GESER BELOKAN & WARNA KABEL ALA WOKWI!
+                    Button(
+                        onClick = { isWireEditMode = !isWireEditMode },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isWireEditMode) Color(0xFF00E676) else Color(0xFF263238)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
                         Text(
-                            text = if (isSimRunning) "STOP" else "RUN",
-                            color = if (isSimRunning) Color.White else SiliconDark,
+                            text = if (isWireEditMode) "📐 Mode Kabel: ON" else "📐 Atur Kabel",
+                            color = if (isWireEditMode) SiliconDark else CopperGold,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            maxLines = 1
                         )
                     }
+
+                    Button(
+                        onClick = {
+                            WokwiSimRenderEngine.autoArrangeNeatGrid(components, canvasSize.width, canvasSize.height)
+                            // Reset juga belokan kabel ke kanal rapi
+                            wires.forEach {
+                                it.bendX = Float.NaN
+                                it.bendY = Float.NaN
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LogicViolet),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("✨ Auto-Rapikan", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, maxLines = 1)
+                    }
+
+                    OutlinedButton(
+                        onClick = onToggleSerialDrawer,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(if (showLiveSerialDrawer) "Tutup Serial" else "Buka Serial", color = PcbMintLight, fontWeight = FontWeight.Bold, fontSize = 10.sp, maxLines = 1)
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Button(
+                    onClick = onToggleRun,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSimRunning) Color(0xFFD32F2F) else Color(0xFF00E676)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isSimRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = if (isSimRunning) Color.White else SiliconDark,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = if (isSimRunning) "STOP" else "RUN",
+                        color = if (isSimRunning) Color.White else SiliconDark,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
                 }
             }
         }
 
-        // 2. KANVAS ZERO-LAG (MENDUKUNG DRAG LANGSUNG + TAP-TO-TELEPORT + D-PAD!)
+        // 2. KANVAS SIRKUIT ZERO-LAG (MENDUKUNG GESER KOMPONEN & GESER TITIK BELOK KABEL!)
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF070C0A)),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(340.dp)
-                .border(2.dp, PcbEmeraldMedium, RoundedCornerShape(16.dp))
+                .height(if (showLiveSerialDrawer) 260.dp else 335.dp)
+                .border(2.dp, if (isWireEditMode) Color(0xFF00E676) else PcbEmeraldMedium, RoundedCornerShape(16.dp))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
-                        // FITUR 1: TAP KOMPONEN LALU TAP TEMPAT KOSONG UNTUK PINDAH INSTAN TANPA GESER!
-                        .pointerInput(Unit) {
+                        .pointerInput(isWireEditMode, selectedBoardVariant) {
                             detectTapGestures { tapOffset ->
+                                val mcuComp = components.find { it.type == SimCompType.ESP32_BOARD }
+                                // Jika sedang Mode Kabel, cek apakah mengetuk titik Handle Kabel
+                                if (isWireEditMode && mcuComp != null) {
+                                    val hitWire = wires.mapIndexedNotNull { idx, w ->
+                                        val src = components.find { it.id == w.fromCompId } ?: return@mapIndexedNotNull null
+                                        val sPt = WokwiSimRenderEngine.getComponentPinOffset(src, w.fromPinName)
+                                        val ePt = WokwiSimRenderEngine.getMcuPinOffset(mcuComp, selectedBoardVariant, w.toMcuPin)
+                                        val elbow = WokwiSimRenderEngine.getWireElbowOffset(w, sPt, ePt, idx)
+                                        if (kotlin.math.hypot(tapOffset.x - elbow.x, tapOffset.y - elbow.y) < 32f) w else null
+                                    }.lastOrNull()
+                                    if (hitWire != null) {
+                                        selectedWire = hitWire
+                                        return@detectTapGestures
+                                    }
+                                }
+
                                 val hit = components.lastOrNull { comp ->
-                                    tapOffset.x >= comp.x - 15f && tapOffset.x <= comp.x + comp.type.hitWidth + 15f &&
-                                            tapOffset.y >= comp.y - 15f && tapOffset.y <= comp.y + comp.type.hitHeight + 15f
+                                    val w = if (comp.type == SimCompType.ESP32_BOARD) selectedBoardVariant.boardWidth else comp.type.hitWidth
+                                    val h = if (comp.type == SimCompType.ESP32_BOARD) selectedBoardVariant.boardHeight else comp.type.hitHeight
+                                    tapOffset.x >= comp.x - 10f && tapOffset.x <= comp.x + w + 10f &&
+                                            tapOffset.y >= comp.y - 10f && tapOffset.y <= comp.y + h + 10f
                                 }
                                 if (hit != null) {
                                     selectedComp = hit
-                                } else if (selectedComp != null) {
-                                    // Pindahkan komponen terpilih langsung ke titik yang diketuk!
+                                } else if (selectedComp != null && !isWireEditMode) {
                                     val target = selectedComp!!
                                     target.x = (tapOffset.x - target.type.hitWidth / 2f).coerceIn(6f, size.width - target.type.hitWidth)
                                     target.y = (tapOffset.y - target.type.hitHeight / 2f).coerceIn(6f, size.height - target.type.hitHeight)
                                 }
                             }
                         }
-                        // FITUR 2: DRAG & DROP ULTRA-MULUS (MUTATING FLOAT STATE LANGSUNG TANPA COPY LIST!)
-                        .pointerInput(Unit) {
+                        .pointerInput(isWireEditMode, selectedBoardVariant) {
                             var draggedComp: SimComponent? = null
+                            var draggedWire: classPinWireConnection? = null
+
                             detectDragGestures(
                                 onDragStart = { startOffset ->
+                                    val mcuComp = components.find { it.type == SimCompType.ESP32_BOARD }
+                                    // 1. Cek apakah pengguna menarik bulatan Handle Belokan Kabel
+                                    if (isWireEditMode && mcuComp != null) {
+                                        draggedWire = wires.mapIndexedNotNull { idx, w ->
+                                            val src = components.find { it.id == w.fromCompId } ?: return@mapIndexedNotNull null
+                                            val sPt = WokwiSimRenderEngine.getComponentPinOffset(src, w.fromPinName)
+                                            val ePt = WokwiSimRenderEngine.getMcuPinOffset(mcuComp, selectedBoardVariant, w.toMcuPin)
+                                            val elbow = WokwiSimRenderEngine.getWireElbowOffset(w, sPt, ePt, idx)
+                                            if (kotlin.math.hypot(startOffset.x - elbow.x, startOffset.y - elbow.y) < 36f) {
+                                                // Inisialisasi koordinat awal jika masih NaN
+                                                if (w.bendX.isNaN()) w.bendX = elbow.x
+                                                if (w.bendY.isNaN()) w.bendY = elbow.y
+                                                w
+                                            } else null
+                                        }.lastOrNull()
+
+                                        if (draggedWire != null) {
+                                            selectedWire = draggedWire
+                                            return@detectDragGestures
+                                        }
+                                    }
+
+                                    // 2. Jika bukan menarik kabel, geser komponen seperti biasa
                                     draggedComp = components.lastOrNull { comp ->
-                                        startOffset.x >= comp.x - 20f && startOffset.x <= comp.x + comp.type.hitWidth + 20f &&
-                                                startOffset.y >= comp.y - 20f && startOffset.y <= comp.y + comp.type.hitHeight + 20f
+                                        val w = if (comp.type == SimCompType.ESP32_BOARD) selectedBoardVariant.boardWidth else comp.type.hitWidth
+                                        val h = if (comp.type == SimCompType.ESP32_BOARD) selectedBoardVariant.boardHeight else comp.type.hitHeight
+                                        startOffset.x >= comp.x - 15f && startOffset.x <= comp.x + w + 15f &&
+                                                startOffset.y >= comp.y - 15f && startOffset.y <= comp.y + h + 15f
                                     }
-                                    if (draggedComp != null) {
-                                        selectedComp = draggedComp
-                                    }
+                                    if (draggedComp != null) selectedComp = draggedComp
                                 },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
+                                    val w = draggedWire
+                                    if (w != null) {
+                                        w.bendX = (w.bendX + dragAmount.x).coerceIn(10f, size.width - 10f)
+                                        w.bendY = (w.bendY + dragAmount.y).coerceIn(10f, size.height - 10f)
+                                        return@detectDragGestures
+                                    }
                                     val c = draggedComp ?: return@detectDragGestures
                                     c.x = (c.x + dragAmount.x).coerceIn(6f, size.width - c.type.hitWidth)
                                     c.y = (c.y + dragAmount.y).coerceIn(6f, size.height - c.type.hitHeight)
                                 },
-                                onDragEnd = { draggedComp = null },
-                                onDragCancel = { draggedComp = null }
+                                onDragEnd = {
+                                    draggedComp = null
+                                    draggedWire = null
+                                },
+                                onDragCancel = {
+                                    draggedComp = null
+                                    draggedWire = null
+                                }
                             )
                         }
                 ) {
+                    canvasSize = size
                     val mcuComp = components.find { it.type == SimCompType.ESP32_BOARD }
 
-                    // 1. Gambar Semua Kabel Penghubung (Menggunakan SharedWirePath agar Zero-Allocation)
+                    // 1. Gambar Jalur Kabel Siku-Siku + Handle Titik Belok
                     if (mcuComp != null) {
-                        wires.forEach { wire ->
+                        wires.forEachIndexed { idx, wire ->
                             val sourceComp = components.find { it.id == wire.fromCompId }
                             if (sourceComp != null) {
-                                val startPt = getComponentPinOffset(sourceComp, wire.fromPinName)
-                                val endPt = getMcuPinOffset(mcuComp, wire.toMcuPin)
-                                drawFastWire(startPt, endPt, wire.wireColor)
+                                val startPt = WokwiSimRenderEngine.getComponentPinOffset(sourceComp, wire.fromPinName)
+                                val endPt = WokwiSimRenderEngine.getMcuPinOffset(mcuComp, selectedBoardVariant, wire.toMcuPin)
+                                drawOrthogonalWire(
+                                    wire = wire,
+                                    start = startPt,
+                                    end = endPt,
+                                    channelIndex = idx,
+                                    showWaypointHandle = isWireEditMode,
+                                    isSelectedWire = isWireEditMode && selectedWire?.id == wire.id
+                                )
                             }
                         }
                     }
 
-                    // 2. Gambar Komponen + Bingkai Sorotan Kuning jika Sedang Dipilih
+                    // 2. Gambar Semua Komponen
                     components.forEach { comp ->
                         val isPowered = checkPowered(comp)
-                        if (selectedComp?.id == comp.id) {
+                        if (selectedComp?.id == comp.id && !isWireEditMode) {
+                            val boxW = if (comp.type == SimCompType.ESP32_BOARD) selectedBoardVariant.boardWidth else comp.type.hitWidth
+                            val boxH = if (comp.type == SimCompType.ESP32_BOARD) selectedBoardVariant.boardHeight else comp.type.hitHeight
                             drawRoundRect(
                                 color = CopperGold.copy(alpha = 0.28f),
-                                topLeft = Offset(comp.x - 6f, comp.y - 6f),
-                                size = Size(comp.type.hitWidth + 12f, comp.type.hitHeight + 12f),
+                                topLeft = Offset(comp.x - 5f, comp.y - 5f),
+                                size = Size(boxW + 10f, boxH + 10f),
                                 cornerRadius = CornerRadius(12f, 12f),
                                 style = Stroke(width = 3f)
                             )
                         }
                         when (comp.type) {
-                            SimCompType.ESP32_BOARD -> drawMcuBoardWithPinLabels(comp.x, comp.y, mcuBoardModel, isSimRunning)
+                            SimCompType.ESP32_BOARD -> drawMcuVariantBoard(comp.x, comp.y, selectedBoardVariant, isSimRunning, isVirtualWifiConnected)
                             SimCompType.RESISTOR_4BAND -> drawResistor4BandWithPins(comp.x, comp.y, resistorOhms)
                             SimCompType.LED_LAMP -> drawLedWithPins(comp.x, comp.y, ledRedOn && isPowered, resistorOhms, isPowered)
                             SimCompType.DHT22_SENSOR -> drawDht22With4Pins(comp.x, comp.y, dhtTempC, isPowered)
@@ -707,38 +772,118 @@ fun WokwiZeroLagWorkbench(
                     }
                 }
 
-                // Overlay Petunjuk & D-Pad Geser Presisi di Pojok Kanvas
+                // Petunjuk Mode Kabel atau Info Wi-Fi Virtual di Kanan Atas Kanvas
                 Row(
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(8.dp)
-                        .background(SiliconDark.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(SiliconDark.copy(alpha = 0.88f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Terpilih: ${selectedComp?.label ?: "-"} (Drag / Tap Kanvas untuk Pindah)",
+                        text = if (isWireEditMode) "📐 Tarik bulatan putih di kabel untuk geser belokan!"
+                        else if (isVirtualWifiConnected) "📶 Wi-Fi: ${BambuVirtualNetwork.VIRTUAL_SSID} (Blynk OK)"
+                        else "📶 Wi-Fi Virtual: Standby",
+                        color = if (isWireEditMode || isVirtualWifiConnected) Color(0xFF00E676) else CopperGold,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        // BAR PEMILIH 10 WARNA KABEL INSTAN (MUNCUL SAAT MODE ATUR KABEL AKTIF!)
+        if (isWireEditMode && selectedWire != null) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SiliconDark),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "🎨 Warna Kabel [${selectedWire!!.fromPinName}➔${selectedWire!!.toMcuPin}]:",
                         color = CopperGold,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    if (selectedComp != null && selectedComp?.type != SimCompType.ESP32_BOARD) {
-                        IconButton(
-                            onClick = { components.remove(selectedComp); selectedComp = null },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        JumperWireColor.entries.take(8).forEach { wc ->
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(wc.color)
+                                    .border(
+                                        width = if (selectedWire!!.wireColor == wc.color) 2.dp else 0.dp,
+                                        color = Color.White,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { selectedWire!!.wireColor = wc.color }
+                            )
                         }
                     }
                 }
             }
         }
 
-        // 3. PANEL BAWAH (SCROLLABLE TERSENDIRI AGAR TIDAK MENGGANGGU KANVAS!)
+        // 3. LIVE SERIAL MONITOR DRAWER
+        if (showLiveSerialDrawer) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SiliconDark),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .border(1.dp, PcbEmeraldMedium, RoundedCornerShape(12.dp))
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "💻 LIVE SIMULATOR SERIAL MONITOR (115200 bps)",
+                            color = CopperGold,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 10.sp
+                        )
+                        Text(
+                            text = "Bersihkan",
+                            color = LogicCyan,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable { onClearSerialLogs() }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(simSerialLogs) { line ->
+                            Text(
+                                text = line,
+                                color = if (line.contains("✅") || line.contains("☁️")) LogicNeonGreen else if (line.contains("⚠️")) CopperGold else Color.White,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. PANEL BAWAH: 24 PILIHAN UKURAN RESISTOR E24 & SLIDER SENSOR
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -747,31 +892,40 @@ fun WokwiZeroLagWorkbench(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                val bandNames = getResistorColorBandNames(resistorOhms)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("🎨 Resistor: $resistorOhms Ω", fontWeight = FontWeight.ExtraBold, color = PcbEmeraldDark, fontSize = 12.sp)
-                    Text("Gelang: $bandNames", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = CopperOrange, fontSize = 11.sp)
+                    Text(
+                        text = "🎨 24 Ukuran Resistor: ${ResistorCatalog.formatOhmLabel(resistorOhms)}",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = PcbEmeraldDark,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = ResistorCatalog.getFourBandNames(resistorOhms),
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = CopperOrange,
+                        fontSize = 10.sp
+                    )
                 }
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    presetResistorValues.forEach { ohm ->
-                        val label = if (ohm >= 1000) "${ohm / 1000.0}k Ω".replace(".0", "") else "$ohm Ω"
+                    ResistorCatalog.standardValuesOhms.forEach { ohm ->
                         FilterChip(
                             selected = resistorOhms == ohm,
                             onClick = { onResistorChange(ohm) },
-                            label = { Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            label = { Text(ResistorCatalog.formatOhmLabel(ohm), fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = PcbEmeraldDark,
                                 selectedLabelColor = CopperGold
@@ -781,8 +935,8 @@ fun WokwiZeroLagWorkbench(
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("🌡️ DHT22 (D4): ${String.format("%.1f", dhtTempC)}°C", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = PcbEmeraldDark)
-                    Text("📏 HC-SR04: ${ultrasonicCm.toInt()} cm", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = LogicCyan)
+                    Text("🌡️ Suhu DHT22: ${String.format("%.1f", dhtTempC)}°C", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = PcbEmeraldDark)
+                    Text("📏 Jarak Sonar: ${ultrasonicCm.toInt()} cm", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = LogicCyan)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Slider(
@@ -800,25 +954,50 @@ fun WokwiZeroLagWorkbench(
                         colors = SliderDefaults.colors(thumbColor = LogicCyan, activeTrackColor = PcbEmeraldDark)
                     )
                 }
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SiliconDark),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = simSerialOutput,
-                        color = LogicNeonGreen,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
             }
         }
     }
 
-    // DIALOG TAMBAH KOMPONEN BARU (OTOMATIS DITEMPATKAN DI POSISI RAPI & LANGSUNG AUTO-WIRE!)
+    // DIALOG PILIH 8 VARIAN MIKROKONTROLER
+    if (showBoardPickerDialog) {
+        AlertDialog(
+            onDismissRequest = { showBoardPickerDialog = false },
+            title = { Text("🎛️ Pilih Board Mikrokontroler", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    McuBoardVariant.entries.forEach { variant ->
+                        OutlinedButton(
+                            onClick = {
+                                onSelectBoardVariant(variant)
+                                showBoardPickerDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(variant.displayName, fontWeight = FontWeight.ExtraBold, color = PcbEmeraldDark, fontSize = 12.sp)
+                                    Text("${variant.totalPhysicalPins} Pin", fontWeight = FontWeight.Bold, color = CopperOrange, fontSize = 11.sp)
+                                }
+                                Text("Chip: ${variant.chipName}", fontSize = 10.sp, color = Color.Gray, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBoardPickerDialog = false }) { Text("Tutup") }
+            }
+        )
+    }
+
+    // DIALOG TAMBAH KOMPONEN SENSOR / AKTUATOR
     if (showAddPartDialog) {
         val addableTypes = listOf(
             SimCompType.HCSR04_SONAR,
@@ -844,15 +1023,15 @@ fun WokwiZeroLagWorkbench(
                         OutlinedButton(
                             onClick = {
                                 val idx = components.size
-                                val newId = "${type.name.lowercase()}_$idx"
                                 val newComp = SimComponent(
-                                    id = newId,
+                                    id = "${type.name.lowercase()}_$idx",
                                     type = type,
                                     label = type.title.substringBefore(" "),
-                                    initialX = 250f + (idx % 2) * 185f,
-                                    initialY = 25f + ((idx / 2) % 2) * 145f
+                                    initialX = 250f,
+                                    initialY = 30f
                                 )
                                 components.add(newComp)
+                                WokwiSimRenderEngine.autoArrangeNeatGrid(components, canvasSize.width, canvasSize.height)
                                 selectedComp = newComp
                                 showAddPartDialog = false
                             },
@@ -876,82 +1055,23 @@ fun WokwiZeroLagWorkbench(
         )
     }
 
-    // DIALOG MANAJEMEN KABEL PIN-KE-PIN
+    // DIALOG MANAJEMEN KABEL PIN-KE-PIN + PILIH 10 WARNA KABEL!
     if (showWireManagerDialog) {
         val nonMcuComps = components.filter { it.type != SimCompType.ESP32_BOARD }
         var wireTargetComp by remember { mutableStateOf(nonMcuComps.firstOrNull()) }
         var selectedCompPin by remember { mutableStateOf(wireTargetComp?.type?.pinNames?.firstOrNull() ?: "VCC") }
-        val mcuPins = SimCompType.ESP32_BOARD.pinNames
-        var selectedMcuPin by remember { mutableStateOf("3V3") }
+        val mcuPins = selectedBoardVariant.allConnectablePins
+        var selectedMcuPin by remember { mutableStateOf(mcuPins.firstOrNull() ?: "3V3") }
+        var pickedWireColor by remember { mutableStateOf(JumperWireColor.CYAN_DATA.color) }
 
         AlertDialog(
             onDismissRequest = { showWireManagerDialog = false },
-            title = { Text("🔌 Pasang / Lepas Kabel Pin", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) },
+            title = { Text("🔌 Pasang Kabel & Pilih Warna", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Button(
-                        onClick = {
-                            val autoWires = mutableListOf<classPinWireConnection>()
-                            components.forEach { c ->
-                                when (c.type) {
-                                    SimCompType.LED_LAMP -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "A+", "D2", Color(0xFFFF5252)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "K-", "GND", Color(0xFF90A4AE)))
-                                    }
-                                    SimCompType.RESISTOR_4BAND -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "P1", "D2", CopperGold))
-                                    }
-                                    SimCompType.DHT22_SENSOR -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "VCC", "3V3", Color(0xFFFF1744)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "DATA", "D4", LogicCyan))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_3", c.id, "GND", "GND", Color(0xFF90A4AE)))
-                                    }
-                                    SimCompType.OLED_SSD1306 -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "GND", "GND", Color(0xFF90A4AE)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "VCC", "3V3", Color(0xFFFF1744)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_3", c.id, "SCL", "D22", LogicNeonGreen))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_4", c.id, "SDA", "D21", CopperGold))
-                                    }
-                                    SimCompType.SERVO_SG90 -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "GND", "GND", Color(0xFF90A4AE)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "VCC", "5V", Color(0xFFFF1744)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_3", c.id, "SIG", "D18", CopperOrange))
-                                    }
-                                    SimCompType.HCSR04_SONAR -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "VCC", "5V", Color(0xFFFF1744)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "TRIG", "D5", LogicCyan))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_3", c.id, "ECHO", "D19", LogicNeonGreen))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_4", c.id, "GND", "GND", Color(0xFF90A4AE)))
-                                    }
-                                    SimCompType.RELAY_1CH -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "VCC", "5V", Color(0xFFFF1744)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "GND", "GND", Color(0xFF90A4AE)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_3", c.id, "IN", "D2", CopperOrange))
-                                    }
-                                    SimCompType.BUZZER_ACTIVE -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "VCC+", "D2", Color(0xFFFF1744)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "GND-", "GND", Color(0xFF90A4AE)))
-                                    }
-                                    SimCompType.POTENTIOMETER -> {
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_1", c.id, "VCC", "3V3", Color(0xFFFF1744)))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_2", c.id, "OUT", "D34", LogicCyan))
-                                        autoWires.add(classPinWireConnection("aw_${c.id}_3", c.id, "GND", "GND", Color(0xFF90A4AE)))
-                                    }
-                                    else -> {}
-                                }
-                            }
-                            onWiresChange(autoWires)
-                            showWireManagerDialog = false
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = PcbEmeraldDark),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("⚡ Auto-Wire Semua VCC, GND & GPIO", color = CopperGold, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
-                    }
-
                     Text("1. Pilih Komponen:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         nonMcuComps.forEach { comp ->
@@ -972,13 +1092,21 @@ fun WokwiZeroLagWorkbench(
                             wireTargetComp!!.type.pinNames.forEach { pinName ->
                                 FilterChip(
                                     selected = selectedCompPin == pinName,
-                                    onClick = { selectedCompPin = pinName },
+                                    onClick = {
+                                        selectedCompPin = pinName
+                                        // Otomatis sarankan warna merah untuk VCC dan abu untuk GND
+                                        pickedWireColor = when (pinName) {
+                                            "VCC", "VCC+", "A+" -> JumperWireColor.RED_VCC.color
+                                            "GND", "GND-", "K-" -> JumperWireColor.BLACK_GND.color
+                                            else -> JumperWireColor.CYAN_DATA.color
+                                        }
+                                    },
                                     label = { Text(pinName, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                 )
                             }
                         }
 
-                        Text("3. Kaki Pin MCU Target:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("3. Kaki Pin pada ${selectedBoardVariant.displayName}:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             mcuPins.forEach { mPin ->
                                 FilterChip(
@@ -989,51 +1117,46 @@ fun WokwiZeroLagWorkbench(
                             }
                         }
 
+                        Text("4. Pilih Warna Kabel Jumper:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            JumperWireColor.entries.forEach { wc ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(wc.color)
+                                        .border(
+                                            width = if (pickedWireColor == wc.color) 3.dp else 1.dp,
+                                            color = if (pickedWireColor == wc.color) PcbEmeraldDark else Color.Gray,
+                                            shape = CircleShape
+                                        )
+                                        .clickable { pickedWireColor = wc.color }
+                                )
+                            }
+                        }
+
                         Button(
                             onClick = {
-                                val color = when (selectedMcuPin) {
-                                    "3V3", "5V" -> Color(0xFFFF1744)
-                                    "GND" -> Color(0xFF90A4AE)
-                                    else -> LogicCyan
-                                }
                                 val filtered = wires.filterNot { it.fromCompId == wireTargetComp!!.id && it.fromPinName == selectedCompPin }
-                                onWiresChange(
-                                    filtered + classPinWireConnection(
-                                        id = "w_${System.currentTimeMillis()}",
-                                        fromCompId = wireTargetComp!!.id,
-                                        fromPinName = selectedCompPin,
-                                        toMcuPin = selectedMcuPin,
-                                        wireColor = color
-                                    )
+                                val newWire = classPinWireConnection(
+                                    id = "w_${System.currentTimeMillis()}",
+                                    fromCompId = wireTargetComp!!.id,
+                                    fromPinName = selectedCompPin,
+                                    toMcuPin = selectedMcuPin,
+                                    initialColor = pickedWireColor
                                 )
+                                onWiresChange(filtered + newWire)
+                                selectedWire = newWire
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = CopperOrange),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Pasang: [${wireTargetComp!!.label}:$selectedCompPin] ➔ [$selectedMcuPin]", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                        }
-                    }
-
-                    HorizontalDivider()
-                    Text("Daftar Kabel Terpasang (${wires.size}):", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    wires.forEach { w ->
-                        val compName = components.find { it.id == w.fromCompId }?.label ?: w.fromCompId
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "• $compName [${w.fromPinName}] ➔ MCU [${w.toMcuPin}]",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp
-                            )
-                            IconButton(
-                                onClick = { onWiresChange(wires.filterNot { it.id == w.id }) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Cabut", tint = Color.Red, modifier = Modifier.size(16.dp))
-                            }
+                            Text("Pasang Kabel: [${wireTargetComp!!.label}:$selectedCompPin] ➔ [$selectedMcuPin]", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1045,21 +1168,19 @@ fun WokwiZeroLagWorkbench(
     }
 }
 
-// =========================================================================
-// BLYNK IOT DASHBOARD PANEL (12 JENIS WIDGET INTERAKTIF + TAMBAH WIDGET!)
-// =========================================================================
-
 @Composable
 fun BlynkDashboardPanel(
     widgets: List<DashWidget>,
     onWidgetsChange: (List<DashWidget>) -> Unit,
     isSimRunning: Boolean,
+    isVirtualWifiConnected: Boolean,
     selectedColor: Color,
     onColorChange: (Color) -> Unit,
     dhtTempC: Float,
     ultrasonicCm: Float
 ) {
     var showAddBlynkDialog by remember { mutableStateOf(false) }
+    val chartPath = remember { Path() }
 
     Column(
         modifier = Modifier
@@ -1067,38 +1188,51 @@ fun BlynkDashboardPanel(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // KARTU KREDENSIAL VIRTUAL WI-FI & BLYNK CLOUD KHUSUS BAMBUSIM
         Card(
             colors = CardDefaults.cardColors(containerColor = SiliconDark),
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.DashboardCustomize, contentDescription = null, tint = CopperGold)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text("BAMBU-BLYNK CLOUD STUDIO", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-                        Text(
-                            text = if (isSimRunning) "🟢 ONLINE • Sinkron dengan Kanvas Sirkuit" else "⚪ STANDBY • Klik RUN di Kanvas untuk Live Sync",
-                            color = if (isSimRunning) Color(0xFF00E676) else CopperGold,
-                            fontSize = 10.sp
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = { showAddBlynkDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = CopperGold),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp)
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("+ Widget Blynk", color = SiliconDark, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.WifiTethering, contentDescription = null, tint = if (isVirtualWifiConnected) Color(0xFF00E676) else CopperGold)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = if (isVirtualWifiConnected) "🟢 BLYNK CLOUD ONLINE (VIRTUAL AP)" else "⚪ BLYNK VIRTUAL AP STANDBY",
+                                color = if (isVirtualWifiConnected) Color(0xFF00E676) else CopperGold,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = "SSID: \"${BambuVirtualNetwork.VIRTUAL_SSID}\" | Pass: \"${BambuVirtualNetwork.VIRTUAL_PASS}\"",
+                                color = LogicCyan,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "Auth Token: ${BambuVirtualNetwork.VIRTUAL_BLYNK_TOKEN}",
+                                color = PcbMintLight,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { showAddBlynkDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = CopperGold),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("+ Widget", color = SiliconDark, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                    }
                 }
             }
         }
@@ -1246,13 +1380,13 @@ fun BlynkDashboardPanel(
                                             val w = size.width
                                             val h = size.height
                                             val pts = listOf(22f, 28f, 26f, 32f, 30f, 35f, dhtTempC)
-                                            SharedWirePath.reset()
+                                            chartPath.reset()
                                             pts.forEachIndexed { i, v ->
                                                 val xPos = (i / (pts.size - 1).toFloat()) * w
                                                 val yPos = h - (v / 80f).coerceIn(0f, 1f) * h
-                                                if (i == 0) SharedWirePath.moveTo(xPos, yPos) else SharedWirePath.lineTo(xPos, yPos)
+                                                if (i == 0) chartPath.moveTo(xPos, yPos) else chartPath.lineTo(xPos, yPos)
                                             }
-                                            drawPath(SharedWirePath, color = widget.color, style = Stroke(3.5f))
+                                            drawPath(chartPath, color = widget.color, style = Stroke(3.5f))
                                         }
                                     }
                                 }
@@ -1280,10 +1414,10 @@ fun BlynkDashboardPanel(
                                             .padding(6.dp)
                                     ) {
                                         Text(
-                                            text = "> MQTT OK\n> V5=${String.format("%.1f", dhtTempC)}C",
+                                            text = if (isVirtualWifiConnected) "> WIFI: ${BambuVirtualNetwork.VIRTUAL_SSID}\n> V5=${String.format("%.1f", dhtTempC)}C" else "> OFFLINE: Cek SSID/Pass di Koding",
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 9.sp,
-                                            color = LogicNeonGreen
+                                            color = if (isVirtualWifiConnected) LogicNeonGreen else CopperGold
                                         )
                                     }
                                 }
@@ -1332,347 +1466,6 @@ fun BlynkDashboardPanel(
     }
 }
 
-// =========================================================================
-// FAST ZERO-ALLOCATION RENDERING ENGINE (MENGGUNAKAN SHARED PAINT & PATH!)
-// =========================================================================
-
-private fun getMcuPinOffset(mcuComp: SimComponent, pinName: String): Offset {
-    val rightPins = listOf("3V3", "5V", "GND", "D2", "D4", "D5", "D18", "D19", "D21", "D22", "D34")
-    val idx = rightPins.indexOf(pinName).coerceAtLeast(0)
-    return Offset(mcuComp.x + 178f, mcuComp.y + 42f + idx * 20f)
-}
-
-private fun getComponentPinOffset(comp: SimComponent, pinName: String): Offset {
-    val pins = comp.type.pinNames
-    val idx = pins.indexOf(pinName).coerceAtLeast(0)
-    return when (comp.type) {
-        SimCompType.RESISTOR_4BAND -> if (idx == 0) Offset(comp.x, comp.y + 25f) else Offset(comp.x + 130f, comp.y + 25f)
-        SimCompType.LED_LAMP -> Offset(comp.x + 22f + idx * 26f, comp.y + 88f)
-        SimCompType.DHT22_SENSOR -> Offset(comp.x + 16f + idx * 24f, comp.y + 128f)
-        SimCompType.OLED_SSD1306 -> Offset(comp.x + 36f + idx * 26f, comp.y + 10f)
-        SimCompType.SERVO_SG90 -> Offset(comp.x + 22f + idx * 28f, comp.y + 92f)
-        SimCompType.HCSR04_SONAR -> Offset(comp.x + 28f + idx * 28f, comp.y + 95f)
-        SimCompType.RELAY_1CH -> Offset(comp.x + 22f + idx * 28f, comp.y + 98f)
-        SimCompType.BUZZER_ACTIVE -> Offset(comp.x + 24f + idx * 30f, comp.y + 84f)
-        SimCompType.POTENTIOMETER -> Offset(comp.x + 20f + idx * 26f, comp.y + 88f)
-        else -> Offset(comp.x, comp.y)
-    }
-}
-
-private fun DrawScope.drawFastWire(start: Offset, end: Offset, wireColor: Color) {
-    SharedWirePath.reset()
-    SharedWirePath.moveTo(start.x, start.y)
-    val ctrlX = (start.x + end.x) * 0.5f
-    val ctrlY = minOf(start.y, end.y) - 24f
-    SharedWirePath.quadraticBezierTo(ctrlX, ctrlY, end.x, end.y)
-    drawPath(SharedWirePath, color = wireColor, style = Stroke(width = 4.5f, cap = StrokeCap.Round))
-    drawCircle(color = CopperGold, radius = 4f, center = start)
-    drawCircle(color = CopperGold, radius = 4f, center = end)
-}
-
-private fun DrawScope.drawMcuBoardWithPinLabels(x: Float, y: Float, boardModel: String, isRunning: Boolean) {
-    val w = 185f
-    val h = 265f
-    drawRoundRect(color = Color(0xFF1A221E), topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(12f, 12f))
-    drawRoundRect(color = CopperGold, topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(12f, 12f), style = Stroke(width = 3f))
-
-    drawRoundRect(color = Color(0xFFB0BEC5), topLeft = Offset(x + 18f, y + 32f), size = Size(90f, 80f), cornerRadius = CornerRadius(6f, 6f))
-    drawContext.canvas.nativeCanvas.apply {
-        SharedTitlePaint.color = android.graphics.Color.BLACK
-        SharedTitlePaint.textSize = 18f
-        drawText(boardModel, x + 32f, y + 70f, SharedTitlePaint)
-        SharedTitlePaint.textSize = 12f
-        drawText(if (boardModel == "ESP32") "WROOM-32" else "NodeMCU", x + 28f, y + 92f, SharedTitlePaint)
-    }
-
-    val rightPins = listOf("3V3", "5V", "GND", "D2", "D4", "D5", "D18", "D19", "D21", "D22", "D34")
-    rightPins.forEachIndexed { idx, pName ->
-        val py = y + 36f + idx * 20f
-        val padColor = when (pName) {
-            "3V3", "5V" -> Color(0xFFFF1744)
-            "GND" -> Color(0xFF90A4AE)
-            else -> CopperGold
-        }
-        drawRoundRect(color = padColor, topLeft = Offset(x + w - 16f, py), size = Size(14f, 12f), cornerRadius = CornerRadius(2f, 2f))
-
-        drawContext.canvas.nativeCanvas.apply {
-            SharedPinPaint.color = when (pName) {
-                "3V3", "5V" -> android.graphics.Color.rgb(255, 82, 82)
-                "GND" -> android.graphics.Color.LTGRAY
-                else -> android.graphics.Color.rgb(255, 215, 64)
-            }
-            drawText(pName, x + w - 50f, py + 10f, SharedPinPaint)
-        }
-    }
-
-    drawCircle(color = Color(0xFFFF1744), radius = 5.5f, center = Offset(x + 35f, y + h - 22f))
-    drawCircle(color = if (isRunning) Color(0xFF00E5FF) else Color(0xFF263238), radius = 6.5f, center = Offset(x + 85f, y + h - 22f))
-}
-
-private fun DrawScope.drawResistor4BandWithPins(x: Float, y: Float, ohms: Int) {
-    drawLine(Color(0xFFB0BEC5), Offset(x, y + 25f), Offset(x + 30f, y + 25f), strokeWidth = 6f)
-    drawLine(Color(0xFFB0BEC5), Offset(x + 100f, y + 25f), Offset(x + 130f, y + 25f), strokeWidth = 6f)
-
-    drawRoundRect(color = Color(0xFFE6CCB2), topLeft = Offset(x + 25f, y + 8f), size = Size(80f, 34f), cornerRadius = CornerRadius(14f, 14f))
-    val bands = calculateResistorBands(ohms)
-    val bandXPositions = listOf(x + 38f, x + 53f, x + 68f, x + 88f)
-    bands.forEachIndexed { idx, bandColor ->
-        drawRect(color = bandColor, topLeft = Offset(bandXPositions[idx], y + 9f), size = Size(8f, 32f))
-    }
-
-    drawContext.canvas.nativeCanvas.apply {
-        SharedPinPaint.color = android.graphics.Color.WHITE
-        drawText("P1", x, y + 18f, SharedPinPaint)
-        drawText("P2", x + 112f, y + 18f, SharedPinPaint)
-        SharedPinPaint.color = android.graphics.Color.YELLOW
-        drawText("${ohms}Ω", x + 42f, y + 56f, SharedPinPaint)
-    }
-}
-
-private fun DrawScope.drawLedWithPins(x: Float, y: Float, isOn: Boolean, resistorOhms: Int, isPowered: Boolean) {
-    drawLine(Color(0xFFFF5252), Offset(x + 22f, y + 52f), Offset(x + 22f, y + 88f), strokeWidth = 5f)
-    drawLine(Color(0xFFB0BEC5), Offset(x + 48f, y + 52f), Offset(x + 48f, y + 88f), strokeWidth = 5f)
-
-    val intensity = (1f - (resistorOhms / 12000f)).coerceIn(0.35f, 1f)
-    val bulbColor = if (isOn) Color(0xFFFF1744).copy(alpha = intensity) else Color(0xFF4A151B)
-
-    if (isOn) {
-        drawCircle(color = Color(0xFFFF5252).copy(alpha = 0.35f * intensity), radius = 42f, center = Offset(x + 35f, y + 28f))
-    }
-    drawCircle(color = bulbColor, radius = 21f, center = Offset(x + 35f, y + 26f))
-    drawRoundRect(color = bulbColor, topLeft = Offset(x + 14f, y + 26f), size = Size(42f, 26f), cornerRadius = CornerRadius(4f, 4f))
-
-    drawContext.canvas.nativeCanvas.apply {
-        SharedPinPaint.color = android.graphics.Color.WHITE
-        drawText("A+", x + 8f, y + 102f, SharedPinPaint)
-        drawText("K-", x + 44f, y + 102f, SharedPinPaint)
-        if (!isPowered) {
-            SharedPinPaint.color = android.graphics.Color.RED
-            drawText("UNWIRED", x + 4f, y - 2f, SharedPinPaint)
-        }
-    }
-}
-
-private fun DrawScope.drawDht22With4Pins(x: Float, y: Float, tempC: Float, isPowered: Boolean) {
-    val w = 104f
-    val h = 100f
-    val pinLabels = listOf("VCC", "DAT", "NC", "GND")
-    pinLabels.forEachIndexed { i, label ->
-        val px = x + 16f + i * 24f
-        drawLine(Color(0xFFB0BEC5), Offset(px, y + h), Offset(px, y + h + 28f), strokeWidth = 4f)
-        drawContext.canvas.nativeCanvas.apply {
-            SharedPinPaint.color = android.graphics.Color.WHITE
-            drawText(label, px - 10f, y + h + 40f, SharedPinPaint)
-        }
-    }
-
-    drawRoundRect(color = Color(0xFF0288D1), topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(10f, 10f))
-    for (row in 1..3) {
-        drawLine(Color(0xFF01579B), Offset(x + 14f, y + row * 16f), Offset(x + w - 14f, y + row * 16f), strokeWidth = 4f)
-    }
-    drawContext.canvas.nativeCanvas.apply {
-        SharedTitlePaint.color = android.graphics.Color.WHITE
-        SharedTitlePaint.textSize = 16f
-        drawText("DHT22", x + 22f, y + h - 22f, SharedTitlePaint)
-        SharedPinPaint.color = if (isPowered) android.graphics.Color.YELLOW else android.graphics.Color.RED
-        drawText(if (isPowered) "${String.format("%.1f", tempC)}°C" else "NO VCC/GND", x + 12f, y + h - 5f, SharedPinPaint)
-    }
-}
-
-private fun DrawScope.drawOledWith4Pins(x: Float, y: Float, isActive: Boolean, line1: String, line2: String, isPowered: Boolean) {
-    val w = 148f
-    val h = 100f
-    drawRoundRect(color = Color(0xFF0D47A1), topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(10f, 10f))
-
-    val oledPins = listOf("GND", "VCC", "SCL", "SDA")
-    oledPins.forEachIndexed { i, label ->
-        val px = x + 36f + i * 26f
-        drawCircle(color = CopperGold, radius = 5f, center = Offset(px, y + 10f))
-        drawContext.canvas.nativeCanvas.apply {
-            SharedPinPaint.color = android.graphics.Color.WHITE
-            drawText(label, px - 11f, y - 4f, SharedPinPaint)
-        }
-    }
-
-    drawRoundRect(color = Color(0xFF050807), topLeft = Offset(x + 10f, y + 22f), size = Size(w - 20f, h - 30f), cornerRadius = CornerRadius(4f, 4f))
-
-    drawContext.canvas.nativeCanvas.apply {
-        if (isActive) {
-            SharedPinPaint.color = android.graphics.Color.YELLOW
-            drawText(line1, x + 16f, y + 46f, SharedPinPaint)
-            SharedPinPaint.color = android.graphics.Color.CYAN
-            drawText(line2, x + 16f, y + 72f, SharedPinPaint)
-        } else {
-            SharedPinPaint.color = if (isPowered) android.graphics.Color.GRAY else android.graphics.Color.RED
-            drawText(if (isPowered) "OLED STANDBY" else "UNWIRED VCC/I2C", x + 16f, y + 58f, SharedPinPaint)
-        }
-    }
-}
-
-private fun DrawScope.drawServoWith3Pins(x: Float, y: Float, angleDeg: Float, isPowered: Boolean) {
-    val w = 100f
-    val h = 68f
-    val servoPins = listOf("GND", "VCC", "SIG")
-    servoPins.forEachIndexed { i, label ->
-        val px = x + 22f + i * 28f
-        drawLine(Color(0xFFB0BEC5), Offset(px, y + h), Offset(px, y + 92f), strokeWidth = 5f)
-        drawContext.canvas.nativeCanvas.apply {
-            SharedPinPaint.color = android.graphics.Color.WHITE
-            drawText(label, px - 11f, y + 106f, SharedPinPaint)
-        }
-    }
-
-    drawRoundRect(color = Color(0xFF1565C0), topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(8f, 8f))
-    val gearCenter = Offset(x + 32f, y + 34f)
-    drawCircle(color = Color.White, radius = 14f, center = gearCenter)
-
-    rotate(degrees = angleDeg - 90f, pivot = gearCenter) {
-        drawRoundRect(color = Color.White, topLeft = Offset(gearCenter.x - 6f, gearCenter.y - 42f), size = Size(12f, 50f), cornerRadius = CornerRadius(6f, 6f))
-        drawCircle(color = CopperOrange, radius = 4f, center = gearCenter)
-    }
-
-    drawContext.canvas.nativeCanvas.apply {
-        SharedPinPaint.color = if (isPowered) android.graphics.Color.WHITE else android.graphics.Color.RED
-        drawText(if (isPowered) "${angleDeg.toInt()}°" else "NO 5V", x + 54f, y + 40f, SharedPinPaint)
-    }
-}
-
-private fun DrawScope.drawHcsr04With4Pins(x: Float, y: Float, distCm: Float, isPowered: Boolean) {
-    val w = 135f
-    val h = 68f
-    val pins = listOf("VCC", "TRG", "ECH", "GND")
-    pins.forEachIndexed { i, label ->
-        val px = x + 28f + i * 28f
-        drawLine(Color(0xFFB0BEC5), Offset(px, y + h), Offset(px, y + 95f), strokeWidth = 4f)
-        drawContext.canvas.nativeCanvas.apply {
-            SharedPinPaint.color = android.graphics.Color.WHITE
-            drawText(label, px - 11f, y + 108f, SharedPinPaint)
-        }
-    }
-    drawRoundRect(color = Color(0xFF0277BD), topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(8f, 8f))
-    drawCircle(color = Color(0xFFCFD8DC), radius = 21f, center = Offset(x + 34f, y + 34f))
-    drawCircle(color = Color(0xFF37474F), radius = 14f, center = Offset(x + 34f, y + 34f))
-    drawCircle(color = Color(0xFFCFD8DC), radius = 21f, center = Offset(x + w - 34f, y + 34f))
-    drawCircle(color = Color(0xFF37474F), radius = 14f, center = Offset(x + w - 34f, y + 34f))
-
-    drawContext.canvas.nativeCanvas.apply {
-        SharedPinPaint.color = if (isPowered) android.graphics.Color.YELLOW else android.graphics.Color.RED
-        drawText(if (isPowered) "${distCm.toInt()}cm" else "UNWIRED", x + 48f, y + 16f, SharedPinPaint)
-    }
-}
-
-private fun DrawScope.drawRelayWith3Pins(x: Float, y: Float, isRelayOn: Boolean, isPowered: Boolean) {
-    val w = 96f
-    val h = 72f
-    val pins = listOf("VCC", "GND", "IN")
-    pins.forEachIndexed { i, label ->
-        val px = x + 22f + i * 28f
-        drawLine(Color(0xFFB0BEC5), Offset(px, y + h), Offset(px, y + 98f), strokeWidth = 4f)
-        drawContext.canvas.nativeCanvas.apply {
-            SharedPinPaint.color = android.graphics.Color.WHITE
-            drawText(label, px - 10f, y + 110f, SharedPinPaint)
-        }
-    }
-    drawRoundRect(color = Color(0xFF1565C0), topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(8f, 8f))
-    drawCircle(color = if (isRelayOn) Color(0xFF00E676) else Color(0xFF424242), radius = 7f, center = Offset(x + w - 16f, y + 16f))
-    drawContext.canvas.nativeCanvas.apply {
-        SharedPinPaint.color = android.graphics.Color.WHITE
-        drawText("RELAY 5V", x + 12f, y + 40f, SharedPinPaint)
-        SharedPinPaint.color = if (isPowered) android.graphics.Color.YELLOW else android.graphics.Color.RED
-        drawText(if (!isPowered) "NO VCC" else if (isRelayOn) "CLICK: ON" else "IDLE: OFF", x + 12f, y + 58f, SharedPinPaint)
-    }
-}
-
-private fun DrawScope.drawBuzzerWith2Pins(x: Float, y: Float, isBeeping: Boolean, isPowered: Boolean) {
-    drawLine(Color(0xFFFF5252), Offset(x + 24f, y + 55f), Offset(x + 24f, y + 84f), strokeWidth = 4f)
-    drawLine(Color(0xFFB0BEC5), Offset(x + 54f, y + 55f), Offset(x + 54f, y + 84f), strokeWidth = 4f)
-    if (isBeeping) {
-        drawCircle(color = CopperGold.copy(alpha = 0.35f), radius = 40f, center = Offset(x + 39f, y + 32f))
-    }
-    drawCircle(color = Color(0xFF212121), radius = 27f, center = Offset(x + 39f, y + 32f))
-    drawCircle(color = Color(0xFF757575), radius = 9f, center = Offset(x + 39f, y + 32f))
-    drawContext.canvas.nativeCanvas.apply {
-        SharedPinPaint.color = android.graphics.Color.WHITE
-        drawText("VCC+", x + 6f, y + 98f, SharedPinPaint)
-        drawText("GND-", x + 44f, y + 98f, SharedPinPaint)
-        if (!isPowered) {
-            SharedPinPaint.color = android.graphics.Color.RED
-            drawText("UNWIRED", x + 10f, y - 2f, SharedPinPaint)
-        }
-    }
-}
-
-private fun DrawScope.drawPotentiometerWith3Pins(x: Float, y: Float, pct: Float, isPowered: Boolean) {
-    val pins = listOf("VCC", "OUT", "GND")
-    pins.forEachIndexed { i, label ->
-        val px = x + 20f + i * 26f
-        drawLine(Color(0xFFB0BEC5), Offset(px, y + 58f), Offset(px, y + 88f), strokeWidth = 4f)
-        drawContext.canvas.nativeCanvas.apply {
-            SharedPinPaint.color = android.graphics.Color.WHITE
-            drawText(label, px - 10f, y + 100f, SharedPinPaint)
-        }
-    }
-    drawCircle(color = Color(0xFF37474F), radius = 27f, center = Offset(x + 46f, y + 32f))
-    drawCircle(color = CopperGold, radius = 17f, center = Offset(x + 46f, y + 32f))
-    drawContext.canvas.nativeCanvas.apply {
-        SharedPinPaint.color = if (isPowered) android.graphics.Color.BLACK else android.graphics.Color.RED
-        drawText(if (isPowered) "${pct.toInt()}%" else "OFF", x + 32f, y + 37f, SharedPinPaint)
-    }
-}
-
-private fun digitToResistorColor(digit: Int): Color {
-    return when (digit.coerceIn(0, 9)) {
-        0 -> Color(0xFF1B1B1B)
-        1 -> Color(0xFF795548)
-        2 -> Color(0xFFD32F2F)
-        3 -> Color(0xFFFF6D00)
-        4 -> Color(0xFFFFEA00)
-        5 -> Color(0xFF2E7D32)
-        6 -> Color(0xFF1565C0)
-        7 -> Color(0xFF8E24AA)
-        8 -> Color(0xFF757575)
-        else -> Color(0xFFFFFFFF)
-    }
-}
-
-private fun digitToColorName(digit: Int): String {
-    return when (digit.coerceIn(0, 9)) {
-        0 -> "Hitam"
-        1 -> "Coklat"
-        2 -> "Merah"
-        3 -> "Oranye"
-        4 -> "Kuning"
-        5 -> "Hijau"
-        6 -> "Biru"
-        7 -> "Ungu"
-        8 -> "Abu"
-        else -> "Putih"
-    }
-}
-
-private fun calculateResistorBands(ohms: Int): List<Color> {
-    val safeOhms = ohms.coerceAtLeast(10)
-    val exp = (log10(safeOhms.toDouble()).toInt() - 1).coerceAtLeast(0)
-    val twoDigits = (safeOhms / 10.0.pow(exp.toDouble())).toInt().coerceIn(10, 99)
-    val d1 = twoDigits / 10
-    val d2 = twoDigits % 10
-    return listOf(
-        digitToResistorColor(d1),
-        digitToResistorColor(d2),
-        digitToResistorColor(exp),
-        Color(0xFFFFD700)
-    )
-}
-
-private fun getResistorColorBandNames(ohms: Int): String {
-    val safeOhms = ohms.coerceAtLeast(10)
-    val exp = (log10(safeOhms.toDouble()).toInt() - 1).coerceAtLeast(0)
-    val twoDigits = (safeOhms / 10.0.pow(exp.toDouble())).toInt().coerceIn(10, 99)
-    val d1 = twoDigits / 10
-    val d2 = twoDigits % 10
-    return "${digitToColorName(d1)}-${digitToColorName(d2)}-${digitToColorName(exp)}-Emas"
-}
-
 @Composable
 fun WokwiCodeEditorPanel(
     codeLang: String,
@@ -1686,7 +1479,29 @@ fun WokwiCodeEditorPanel(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Banner Info Kredensial Virtual Wi-Fi & Blynk
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PcbEmeraldDark),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = "📶 VIRTUAL WI-FI CREDENTIALS (WAJIB SAMA AGAR BLYNK TERHUBUNG):",
+                        color = CopperGold,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 10.sp
+                    )
+                    Text(
+                        text = "SSID: \"${BambuVirtualNetwork.VIRTUAL_SSID}\" | PASS: \"${BambuVirtualNetwork.VIRTUAL_PASS}\" | TOKEN: \"${BambuVirtualNetwork.VIRTUAL_BLYNK_TOKEN}\"",
+                        color = LogicNeonGreen,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1736,9 +1551,9 @@ fun WokwiCodeEditorPanel(
 fun BuiltInLibraryCatalogView() {
     val libs = remember {
         listOf(
-            BuiltInLibInfo("<WiFi.h> & <ESP8266WiFi.h>", "C++", "Networking", "Koneksi Wi-Fi STA/AP untuk ESP32 & ESP8266 NodeMCU", "WiFi.begin(ssid, pass); WiFi.localIP();"),
+            BuiltInLibInfo("<WiFi.h> & <ESP8266WiFi.h>", "C++", "Networking", "Koneksi Virtual Wi-Fi (${BambuVirtualNetwork.VIRTUAL_SSID}) untuk ESP32 & ESP8266", "WiFi.begin(ssid, pass); WiFi.localIP();"),
             BuiltInLibInfo("<PubSubClient.h>", "C++", "IoT MQTT", "Klien Broker MQTT Port 1883 Publish & Subscribe", "client.connect(\"ESP32\"); client.publish(topic, payload);"),
-            BuiltInLibInfo("<BlynkSimpleEsp32.h>", "C++", "Blynk Cloud", "Integrasi Virtual Pin V1-V12 Blynk SCADA Dashboard", "Blynk.virtualWrite(V5, tempC); BLYNK_WRITE(V1)"),
+            BuiltInLibInfo("<BlynkSimpleEsp32.h>", "C++", "Blynk Cloud", "Integrasi Virtual Pin V1-V12 dengan Token ${BambuVirtualNetwork.VIRTUAL_BLYNK_TOKEN}", "Blynk.begin(auth, ssid, pass); Blynk.virtualWrite(V5, t);"),
             BuiltInLibInfo("<Wire.h> & <SPI.h>", "C++", "Core Bus", "Komunikasi I2C (SDA=D21, SCL=D22) & SPI High-Speed", "Wire.begin(21, 22); SPI.begin();"),
             BuiltInLibInfo("<Adafruit_SSD1306.h> & <Adafruit_GFX.h>", "C++", "Display", "Layar OLED 0.96\" & 1.3\" 128x64 I2C (Alamat 0x3C)", "display.println(\"TEKS\"); display.display();"),
             BuiltInLibInfo("<LiquidCrystal_I2C.h>", "C++", "Display", "Layar LCD Karakter 16x2 & 20x4 I2C PCF8574 (0x27)", "lcd.init(); lcd.backlight(); lcd.print(\"HELLO\");"),

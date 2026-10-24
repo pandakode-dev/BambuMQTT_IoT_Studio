@@ -34,14 +34,14 @@ enum class IotNavTab(val title: String, val icon: ImageVector) {
     SERIAL("Serial", Icons.Default.Terminal),
     WOKWI_SIM("Wokwi Sim", Icons.Default.Memory),
     CODE_IDE("IDE/OTA", Icons.Default.Code),
-    PLOTTER("Plotter", Icons.Default.ShowChart),
+    CLOUD_HUB("Cloud/CAM", Icons.Default.CloudSync),
     HARDWARE("Lab MCU", Icons.Default.DeveloperBoard)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BambuMqttMainApp() {
-    var currentTab by remember { mutableStateOf(IotNavTab.SERIAL) }
+    var currentTab by remember { mutableStateOf(IotNavTab.DASHBOARD) }
 
     Scaffold(
         topBar = {
@@ -63,7 +63,7 @@ fun BambuMqttMainApp() {
                                 fontSize = 18.sp
                             )
                             Text(
-                                text = "SCADA, USB/OTA Serial & Wokwi Simulator • by PandaKode",
+                                text = "SCADA, Wokwi Sim, Voice IoT, ESP-CAM & OTA • by PandaKode",
                                 color = PcbMintLight,
                                 fontSize = 10.sp
                             )
@@ -112,7 +112,7 @@ fun BambuMqttMainApp() {
                 IotNavTab.SERIAL -> SerialMonitorScreen()
                 IotNavTab.WOKWI_SIM -> WokwiSimScreen()
                 IotNavTab.CODE_IDE -> EspCodeStudioScreen()
-                IotNavTab.PLOTTER -> SerialPlotterScreen()
+                IotNavTab.CLOUD_HUB -> PayloadStudioScreen()
                 IotNavTab.HARDWARE -> HardwareLabScreen()
             }
         }
