@@ -3,8 +3,10 @@ package com.pandakode.bambumqtt.ui.screens
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.pandakode.bambumqtt.ui.theme.*
 import kotlin.math.floor
@@ -17,7 +19,6 @@ object BambuVirtualNetwork {
     const val VIRTUAL_BLYNK_TOKEN = "BAMBU-BLYNK-2026"
 }
 
-// PALET 10 WARNA KABEL JUMPER STANDAR WOKWI / ELEKTRONIKA
 enum class JumperWireColor(val label: String, val color: Color) {
     RED_VCC("Merah (VCC)", Color(0xFFFF1744)),
     BLACK_GND("Abu/Hitam (GND)", Color(0xFF90A4AE)),
@@ -208,32 +209,59 @@ object ResistorCatalog {
     }
 }
 
-enum class SimCompType(val title: String, val pinNames: List<String>, val hitWidth: Float, val hitHeight: Float) {
-    ESP32_BOARD("Mikrokontroler Utama", emptyList(), 195f, 295f),
-    LED_LAMP("LED 5mm Merah", listOf("A+", "K-"), 72f, 95f),
-    RESISTOR_4BAND("Resistor 4-Gelang", listOf("P1", "P2"), 130f, 58f),
-    DHT22_SENSOR("Sensor Suhu DHT22", listOf("VCC", "DATA", "NC", "GND"), 105f, 130f),
-    OLED_SSD1306("OLED 0.96\" I2C", listOf("GND", "VCC", "SCL", "SDA"), 148f, 105f),
-    SERVO_SG90("Motor Servo SG90", listOf("GND", "VCC", "SIG"), 105f, 100f),
-    HCSR04_SONAR("Ultrasonik HC-SR04", listOf("VCC", "TRIG", "ECHO", "GND"), 135f, 100f),
-    RELAY_1CH("Modul Relay 1CH", listOf("VCC", "GND", "IN"), 100f, 105f),
-    BUZZER_ACTIVE("Buzzer Piezo", listOf("VCC+", "GND-"), 82f, 95f),
-    POTENTIOMETER("Potensiometer Analog", listOf("VCC", "OUT", "GND"), 92f, 95f)
+enum class SimCompType(
+    val title: String,
+    val shortDesc: String,
+    val pinNames: List<String>,
+    val hitWidth: Float,
+    val hitHeight: Float
+) {
+    ESP32_BOARD("Mikrokontroler Utama", "Board MCU Inti", emptyList(), 195f, 295f),
+    DHT22_SENSOR("Sensor Suhu DHT22", "Suhu & Lembab Udara Digital", listOf("VCC", "DATA", "NC", "GND"), 108f, 138f),
+    HCSR04_SONAR("Ultrasonik HC-SR04", "Sensor Jarak Akustik 2-200cm", listOf("VCC", "TRIG", "ECHO", "GND"), 142f, 115f),
+    PIR_MOTION("Sensor Gerak PIR", "Detektor Inframerah Manusia", listOf("VCC", "OUT", "GND"), 112f, 115f),
+    SOIL_MOISTURE("Sensor Lembab Tanah", "Probe Kapasitif Pertanian", listOf("VCC", "GND", "AOUT"), 100f, 118f),
+    LDR_LIGHT("Sensor Cahaya LDR", "Detektor Intensitas Cahaya Lux", listOf("VCC", "GND", "DO/AO"), 102f, 105f),
+    OLED_SSD1306("OLED 0.96\" I2C", "Layar Grafis 128x64 (0x3C)", listOf("GND", "VCC", "SCL", "SDA"), 148f, 110f),
+    LCD_16X2_I2C("LCD 16x2 I2C (0x27)", "Layar Karakter Backlight Hijau", listOf("GND", "VCC", "SDA", "SCL"), 162f, 104f),
+    SERVO_SG90("Motor Servo SG90", "Aktuator Sudut Presisi 0-180°", listOf("GND", "VCC", "SIG"), 110f, 108f),
+    STEPPER_MOTOR("Stepper 28BYJ-48", "Motor Langkah Rotasi Presisi", listOf("VCC", "GND", "STEP", "DIR"), 115f, 115f),
+    NEOPIXEL_RING("NeoPixel Ring 8-LED", "Cincin RGB WS2812B Pelangi", listOf("GND", "5V", "DIN"), 112f, 115f),
+    RELAY_1CH("Modul Relay 1CH", "Saklar Elektromagnetik Pompa/AC", listOf("VCC", "GND", "IN"), 100f, 110f),
+    BUZZER_ACTIVE("Buzzer Piezo", "Alarm Suara Aktif Frekuensi", listOf("VCC+", "GND-"), 86f, 102f),
+    LED_LAMP("LED 5mm Merah", "Indikator Dioda Pancar Cahaya", listOf("A+", "K-"), 72f, 102f),
+    RESISTOR_4BAND("Resistor 4-Gelang", "Penghambat Arus 24 Ukuran E24", listOf("P1", "P2"), 130f, 58f),
+    POTENTIOMETER("Potensiometer Analog", "Pemutar Tegangan Variabel ADC", listOf("VCC", "OUT", "GND"), 94f, 102f),
+    PUSH_BUTTON("Push Button Tactile", "Saklar Tekan Momentary Digital", listOf("PIN1", "GND"), 82f, 95f)
 }
 
+// Komponen kini mendukung Rotasi (0, 90, 180, 270) & Mirror Pin (Flip Kiri-Kanan)!
 @Stable
 class SimComponent(
     val id: String,
     val type: SimCompType,
-    val label: String,
+    initialLabel: String,
     initialX: Float,
-    initialY: Float
+    initialY: Float,
+    initialRotation: Int = 0,
+    initialMirrored: Boolean = false
 ) {
+    var label by mutableStateOf(initialLabel)
     var x by mutableFloatStateOf(initialX)
     var y by mutableFloatStateOf(initialY)
+    var rotationDeg by mutableIntStateOf(initialRotation) // 0, 90, 180, 270
+    var isMirrored by mutableStateOf(initialMirrored)    // true = Urutan Pin dibalik Kiri-ke-Kanan (Mirror)
 }
 
-// MODEL KABEL JUMPER DENGAN WARNA DINAMIS & KOORDINAT BELOKAN (WAYPOINT) YANG BISA DIGESER JARI!
+data class PinHitTarget(
+    val isMcu: Boolean,
+    val compId: String,
+    val compLabel: String,
+    val pinName: String,
+    val position: Offset
+)
+
+// Default initialCurved = false (SEMUA KABEL OTOMATIS SIKU-SIKU 90 DERAJAT!)
 @Stable
 class classPinWireConnection(
     val id: String,
@@ -241,12 +269,18 @@ class classPinWireConnection(
     val fromPinName: String,
     val toMcuPin: String,
     initialColor: Color,
-    initialBendX: Float = Float.NaN, // NaN = Gunakan kanal default sampai digeser pengguna
-    initialBendY: Float = Float.NaN
+    initialBendX: Float = Float.NaN,
+    initialBendY: Float = Float.NaN,
+    initialBend2X: Float = Float.NaN,
+    initialBend2Y: Float = Float.NaN,
+    initialCurved: Boolean = false // Default: SIKU-SIKU (Orthogonal PCB)
 ) {
     var wireColor by mutableStateOf(initialColor)
     var bendX by mutableFloatStateOf(initialBendX)
     var bendY by mutableFloatStateOf(initialBendY)
+    var bend2X by mutableFloatStateOf(initialBend2X)
+    var bend2Y by mutableFloatStateOf(initialBend2Y)
+    var isCurvedStyle by mutableStateOf(initialCurved)
 }
 
 enum class DashWidgetType(val label: String) {

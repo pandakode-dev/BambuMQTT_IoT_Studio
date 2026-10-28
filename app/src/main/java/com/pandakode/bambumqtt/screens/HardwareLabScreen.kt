@@ -21,20 +21,26 @@ import com.pandakode.bambumqtt.ui.theme.*
 @Composable
 fun HardwareLabScreen() {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Baterai IoT", "ADC 3.3V", "ESP32 Pin", "Kamus I2C")
+    val tabs = listOf(
+        "🤖 AI & Node-RED",
+        "☀️ Solar & Baterai",
+        "🖨️ PDF & FFT Lab",
+        "📌 Pinout & I2C"
+    )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(EsdMatBg)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
             containerColor = PcbEmeraldDark,
-            contentColor = CopperGold
+            contentColor = CopperGold,
+            edgePadding = 8.dp
         ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
@@ -43,8 +49,9 @@ fun HardwareLabScreen() {
                     text = {
                         Text(
                             text = title,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             fontSize = 11.sp,
+                            maxLines = 1,
                             color = if (selectedTab == index) CopperGold else Color.White
                         )
                     }
@@ -53,10 +60,20 @@ fun HardwareLabScreen() {
         }
 
         when (selectedTab) {
-            0 -> DeepSleepBatteryCard()
-            1 -> AdcVoltageDividerCard()
-            2 -> Esp32PinoutReferenceList()
-            3 -> I2cAddressDecoderList()
+            0 -> BambuAiAndFlowContent()
+            1 -> {
+                SolarOffGridCalculatorCard()
+                DeepSleepBatteryCard()
+                AdcVoltageDividerCard()
+            }
+            2 -> {
+                SchematicBlueprintExporterCard()
+                FftSpectrumAnalyzerView()
+            }
+            3 -> {
+                I2cAddressDecoderList()
+                Esp32PinoutReferenceList()
+            }
         }
     }
 }
@@ -95,13 +112,13 @@ fun DeepSleepBatteryCard() {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = capacityMah, onValueChange = { capacityMah = it }, label = { Text("Baterai (mAh)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = intervalMinutes, onValueChange = { intervalMinutes = it }, label = { Text("Interval Kirim (Mnt)") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = capacityMah, onValueChange = { capacityMah = it }, label = { Text("Baterai (mAh)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = intervalMinutes, onValueChange = { intervalMinutes = it }, label = { Text("Interval Kirim (Mnt)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = activeCurrentMa, onValueChange = { activeCurrentMa = it }, label = { Text("Arus Aktif (mA)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = activeSeconds, onValueChange = { activeSeconds = it }, label = { Text("Durasi Aktif (Dtk)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = sleepUa, onValueChange = { sleepUa = it }, label = { Text("Sleep (µA)") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = activeCurrentMa, onValueChange = { activeCurrentMa = it }, label = { Text("Aktif (mA)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = activeSeconds, onValueChange = { activeSeconds = it }, label = { Text("Durasi (Dtk)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = sleepUa, onValueChange = { sleepUa = it }, label = { Text("Sleep (µA)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -144,9 +161,9 @@ fun AdcVoltageDividerCard() {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = vInput, onValueChange = { vInput = it }, label = { Text("Vin Sensor/Aki (V)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = r1Kohm, onValueChange = { r1Kohm = it }, label = { Text("R1 Atas (kΩ)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = r2Kohm, onValueChange = { r2Kohm = it }, label = { Text("R2 GND (kΩ)") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = vInput, onValueChange = { vInput = it }, label = { Text("Vin Sensor/Aki (V)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = r1Kohm, onValueChange = { r1Kohm = it }, label = { Text("R1 Atas (kΩ)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = r2Kohm, onValueChange = { r2Kohm = it }, label = { Text("R2 GND (kΩ)", fontSize = 11.sp) }, singleLine = true, modifier = Modifier.weight(1f))
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -232,7 +249,7 @@ fun I2cAddressDecoderList() {
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            label = { Text("Cari Alamat HEX I2C (Misal: 0x3C, 0x27, 0x76, BME280)") },
+            label = { Text("Cari Alamat HEX I2C (Misal: 0x3C, 0x27, 0x76, BME280)", fontSize = 11.sp) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )

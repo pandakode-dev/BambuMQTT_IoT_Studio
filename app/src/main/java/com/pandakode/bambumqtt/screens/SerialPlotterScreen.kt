@@ -32,6 +32,9 @@ import kotlin.random.Random
 
 @Composable
 fun SerialPlotterScreen() {
+    var selectedPlotTab by remember { mutableIntStateOf(0) }
+    val plotTabs = listOf("📈 Osiloskop (Time-Domain)", "📊 Spektrum FFT (Hz)")
+
     var isRunning by remember { mutableStateOf(true) }
     var phase by remember { mutableFloatStateOf(0f) }
 
@@ -61,147 +64,171 @@ fun SerialPlotterScreen() {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. HEADER KONTROL PLOTTER (TATA LETAK HORIZONTAL RAPI, TIDAK LAGI VERTIKAL!)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = PcbEmeraldDark),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+        TabRow(
+            selectedTabIndex = selectedPlotTab,
+            containerColor = PcbEmeraldDark,
+            contentColor = CopperGold
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Bagian Kiri diberi weight(1f) agar teks tidak menabrak tombol
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ShowChart,
-                        contentDescription = null,
-                        tint = CopperGold,
-                        modifier = Modifier.size(26.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
+            plotTabs.forEachIndexed { idx, title ->
+                Tab(
+                    selected = selectedPlotTab == idx,
+                    onClick = { selectedPlotTab = idx },
+                    text = {
                         Text(
-                            text = "LIVE SERIAL WAVEFORM PLOTTER",
-                            color = CopperGold,
+                            text = title,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "CH1: ADC1 (Hijau) | CH2: PID (Cyan)",
-                            color = PcbMintLight,
                             fontSize = 11.sp,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = if (selectedPlotTab == idx) CopperGold else Color.White
+                        )
+                    }
+                )
+            }
+        }
+
+        if (selectedPlotTab == 1) {
+            FftSpectrumAnalyzerView()
+        } else {
+            // 1. HEADER KONTROL PLOTTER TIME-DOMAIN
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PcbEmeraldDark),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ShowChart,
+                            contentDescription = null,
+                            tint = CopperGold,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "LIVE SERIAL WAVEFORM PLOTTER",
+                                color = CopperGold,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "CH1: ADC1 (Hijau) | CH2: PID (Cyan)",
+                                color = PcbMintLight,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = { isRunning = !isRunning },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isRunning) CopperOrange else CopperGold
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = SiliconDark,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isRunning) "FREEZE" else "RUN",
+                            color = SiliconDark,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp,
+                            maxLines = 1
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Tombol Freeze/Run Horizontal Normal (Tampil Menyamping Utuh)
-                Button(
-                    onClick = { isRunning = !isRunning },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isRunning) CopperOrange else CopperGold
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = SiliconDark,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (isRunning) "FREEZE" else "RUN",
-                        color = SiliconDark,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 11.sp,
-                        maxLines = 1
-                    )
-                }
             }
-        }
 
-        // 2. LAYAR OSILOSKOP DUAL-CHANNEL (CANVAS)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = SiliconDark),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(270.dp)
-                .border(2.dp, PcbEmeraldMedium, RoundedCornerShape(16.dp))
-        ) {
-            Box(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val w = size.width
-                    val h = size.height
+            // 2. LAYAR OSILOSKOP DUAL-CHANNEL (CANVAS)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SiliconDark),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(265.dp)
+                    .border(2.dp, PcbEmeraldMedium, RoundedCornerShape(16.dp))
+            ) {
+                Box(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val w = size.width
+                        val h = size.height
 
-                    val cols = 8
-                    val rows = 6
-                    for (i in 0..cols) {
-                        val x = i * (w / cols)
-                        drawLine(TerminalBorder, Offset(x, 0f), Offset(x, h), strokeWidth = 1.5f)
-                    }
-                    for (j in 0..rows) {
-                        val y = j * (h / rows)
-                        drawLine(TerminalBorder, Offset(0f, y), Offset(w, y), strokeWidth = 1.5f)
-                    }
-
-                    fun drawWaveform(samples: List<Float>, color: Color) {
-                        if (samples.size < 2) return
-                        val path = Path()
-                        val stepX = w / (samples.size - 1)
-                        samples.forEachIndexed { index, value ->
-                            val x = index * stepX
-                            val y = h - (value / 100f) * h
-                            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                        val cols = 8
+                        val rows = 6
+                        for (i in 0..cols) {
+                            val x = i * (w / cols)
+                            drawLine(TerminalBorder, Offset(x, 0f), Offset(x, h), strokeWidth = 1.5f)
                         }
-                        drawPath(path, color = color, style = Stroke(width = 4.5f))
+                        for (j in 0..rows) {
+                            val y = j * (h / rows)
+                            drawLine(TerminalBorder, Offset(0f, y), Offset(w, y), strokeWidth = 1.5f)
+                        }
+
+                        fun drawWaveform(samples: List<Float>, color: Color) {
+                            if (samples.size < 2) return
+                            val path = Path()
+                            val stepX = w / (samples.size - 1)
+                            samples.forEachIndexed { index, value ->
+                                val x = index * stepX
+                                val y = h - (value / 100f) * h
+                                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+                            drawPath(path, color = color, style = Stroke(width = 4.5f))
+                        }
+
+                        drawWaveform(ch2Samples, LogicCyan)
+                        drawWaveform(ch1Samples, LogicNeonGreen)
                     }
 
-                    drawWaveform(ch2Samples, LogicCyan)
-                    drawWaveform(ch1Samples, LogicNeonGreen)
+                    Text(
+                        text = "TIME/DIV: 120ms • SCALE: 0-100%",
+                        color = CopperGold,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    )
                 }
-
-                Text(
-                    text = "TIME/DIV: 120ms • SCALE: 0-100%",
-                    color = CopperGold,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                )
             }
-        }
 
-        // 3. KARTU METRIK TELEMETRI PUNCAK (MIN / MAX / CURRENT)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "ANALISIS SINYAL TELEMETRI REAL-TIME",
-                    fontWeight = FontWeight.ExtraBold,
-                    color = PcbEmeraldDark,
-                    fontSize = 12.sp
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PlotStatBox("CH1 LIVE", String.format("%.1f", ch1Latest), PcbEmeraldDark, Modifier.weight(1f))
-                    PlotStatBox("CH1 MIN", String.format("%.1f", ch1Min), LogicCyan, Modifier.weight(1f))
-                    PlotStatBox("CH1 PEAK", String.format("%.1f", ch1Max), CopperOrange, Modifier.weight(1f))
+            // 3. KARTU METRIK TELEMETRI PUNCAK (MIN / MAX / CURRENT)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "ANALISIS SINYAL TELEMETRI REAL-TIME",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = PcbEmeraldDark,
+                        fontSize = 12.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PlotStatBox("CH1 LIVE", String.format("%.1f", ch1Latest), PcbEmeraldDark, Modifier.weight(1f))
+                        PlotStatBox("CH1 MIN", String.format("%.1f", ch1Min), LogicCyan, Modifier.weight(1f))
+                        PlotStatBox("CH1 PEAK", String.format("%.1f", ch1Max), CopperOrange, Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -215,8 +242,8 @@ fun PlotStatBox(title: String, value: String, color: Color, modifier: Modifier =
             .background(EsdMatBg, RoundedCornerShape(12.dp))
             .padding(10.dp)
     ) {
-        Text(title, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(title, fontSize = 9.5.sp, color = Color.Gray, fontWeight = FontWeight.Bold, maxLines = 1)
         Spacer(modifier = Modifier.height(2.dp))
-        Text(value, fontSize = 16.sp, color = color, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, maxLines = 1)
+        Text(value, fontSize = 15.sp, color = color, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, maxLines = 1)
     }
 }
